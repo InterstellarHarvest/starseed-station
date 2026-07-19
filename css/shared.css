@@ -1,0 +1,3158 @@
+/* ============================================================================
+   STARSEED STATION — shared.css
+   Loaded by every demo and the final index.html.
+   New rule: if a style could be useful in more than one room, it goes HERE.
+   ============================================================================ */
+
+/* --- Palette (global CSS variables) ---------------------------------------- */
+:root {
+  --bg-void:        #0a0a1a;
+  --bg-base:        #0d0d0d;
+  --panel:          #1a1a2e;
+  --text:           #e8e8e8;
+  --text-dim:       #8a8a9a;
+
+  --accent-go:      #00ff88;  /* healthy / unlocked / success */
+  --accent-warn:    #ffcc00;  /* warning / amber */
+  --accent-stop:    #ff4455;  /* critical / failure */
+
+  --health-full:    #44dd44;
+  --health-low:     #dd4444;
+
+  --nutrient-n:     #4488ff;  /* nitrogen blue */
+  --nutrient-p:     #ff8800;  /* phosphorus orange */
+  --nutrient-k:     #44cc44;  /* potassium green */
+
+  --pixel-font:     'Press Start 2P', 'Silkscreen', monospace;
+}
+
+/* --- Global reset ---------------------------------------------------------- */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg-base);
+  color: var(--text);
+  font-family: var(--pixel-font);
+  font-size: 10px;
+  overflow: hidden;
+  /* Disable browser default tooltips globally — we use our own pixel art frame. */
+}
+
+[title] { /* suppress native tooltip on anything we forget to strip the attr from */
+  pointer-events: auto;
+}
+
+/* Pixel-perfect rendering for all images by default */
+img, canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+/* --- Canvas frame ---------------------------------------------------------- */
+/* The whole game lives inside a 1280×720 stage centered in the viewport. */
+#stage {
+  width: 1280px;
+  height: 720px;
+  position: relative;
+  margin: 0 auto;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+
+#top-bar    { position: absolute; left: 0; top: 0;    width: 1280px; height: 60px;  z-index: 100; }
+#game-panel { position: absolute; left: 0; top: 60px; width: 1280px; height: 580px; z-index: 10;  }
+#tray       { position: absolute; left: 0; top: 640px; width: 1280px; height: 80px; z-index: 100; }
+
+/* --- Tooltip system -------------------------------------------------------- */
+/* Pure CSS box. Content injected by JS via showTooltip(). */
+.tooltip {
+  background: var(--panel);
+  border: 2px solid var(--accent-warn);
+  box-shadow: 0 0 0 1px var(--bg-base);
+  padding: 6px 8px;
+  font-family: var(--pixel-font);
+  font-size: 8px;
+  line-height: 1.6;
+  color: var(--text);
+  pointer-events: none;
+  position: absolute;
+  z-index: 9999;
+  max-width: var(--tt-max-width, 170px);
+  display: none;
+}
+.tooltip.visible { display: block; }
+
+/* Tooltip / autopsy-card shared "label : value" classes.
+   Declared OUTSIDE the .tooltip prefix so they apply in both contexts. */
+.tt-name  { color: var(--accent-go); display: block; margin-bottom: 4px; font-size: 9px; }
+.tt-name.tt-bad { color: var(--accent-stop); }   /* negative/stress badge titles render red */
+.tt-row   { display: block; margin-bottom: 2px; }
+.tt-label { margin-right: 6px; }       /* color is per-category, set below */
+.tt-value { color: var(--text); }      /* white by default */
+.tt-sep   { color: var(--text-dim); margin: 0 4px; }
+
+/* Per-category label colors — each category gets a unique tint so the eye
+   can scan rows at a glance without reading the word. */
+.tt-cat-health      { color: #ff6066; }                     /* red — life */
+.tt-cat-stage       { color: #44ddff; }                     /* cyan — growth */
+.tt-cat-water       { color: var(--nutrient-n); }           /* blue */
+.tt-cat-light       { color: var(--accent-warn); }          /* yellow */
+.tt-cat-nutrient    { color: var(--nutrient-p); }           /* orange */
+.tt-cat-pollination { color: #ff66cc; }                     /* pink */
+.tt-cat-revealed    { color: #aa66ff; }                     /* purple */
+.tt-cat-substrate   { color: #cc8866; }                     /* earth brown */
+.tt-cat-cause       { color: var(--accent-stop); }          /* red — death cause */
+.tt-cat-room        { color: var(--text-dim); }
+
+/* --- Tweakable knobs (Demo 01+) ------------------------------------------ */
+/* Demos can override any of these via the Devtools sidebar (which mutates the
+   CSS custom property on documentElement). Once a value is dialed in, paste it
+   here as the new default and remove the slider. */
+:root {
+  --slot-w:           110px;
+  --slot-h:           72px;
+  --slot-gap:         6px;
+  --slot-border:      12px;
+  --slot-slice:       12;
+  --slot-frame:       url('../sprites/plant_slot.png');
+
+  --plant-size:       58px;
+  --plant-x-pad:      6px;    /* horizontal offset from slot CENTER (+ = right, - = left) */
+  --plant-y-shift:    0px;
+  --plant-col:        0;
+  --plant-row:        0;
+  --plant-clip-overflow: 6px; /* how far the clip extends PAST the padding box into the border zone — tune to match where the visible bezel-interior begins */
+
+  --pip-w:            10px;   /* horizontal bar width (each pip = a wide-short rectangle) */
+  --pip-h:            5px;    /* horizontal bar height */
+  --pip-gap:          2px;
+  --pip-x-pad:        0px;    /* left offset from slot interior edge */
+  --pip-healthy:      #44dd44;
+  --pip-critical:     #dd4444;
+  --pip-empty:        #2a2a2a;
+
+  --badge-size:       25px;
+  --badge-gap:        2px;
+  --badges-per-row:   4;       /* max badges before wrapping to a new row above */
+  --badge-overflow:   visible; /* 'visible' lets the stack render above the slot */
+
+  --skull-size:       48px;
+  --skull-opacity:    0.85;
+
+  --tray-bg:          #0a0a14;
+
+  --dead-tray-w:      143px;
+  --dead-tray-h:      72px;
+  --dead-tray-badge:  20px;
+  --dead-tray-badge-color: #ff4455;
+
+  --action-zone-w:    182px;
+  --action-btn-w:     182px;
+  --action-btn-h:     60px;
+  --action-btn-gap:   4px;
+  --action-btn-label-color: #009192;
+  --action-btn-font-size:   10px;
+  --action-btn-line-height: 1.2;
+  --action-btn-press-x:     2px;   /* label shifts right when pressed */
+  --action-btn-press-y:     2px;   /* label shifts down when pressed */
+
+  --sel-color:        #00ff88;
+  --sel-width:        2px;
+  --sel-radius:       5px;
+  --sel-offset:       -4px;
+  --active-color:     #ffcc00;
+
+  --modal-bg-alpha:   0.75;
+  --card-w:           190px;
+  --card-h:           250px;
+  --card-grid-gap:    25px;   /* gap between autopsy cards in the grid */
+  --ac-plant-size:    80px;   /* dead plant sprite inside an autopsy card */
+  --ac-plant-y:       -5px;   /* top margin — slide to push the sprite up/down */
+  --ac-cause-size:    35px;   /* cause-of-death icon inside an autopsy card */
+  --ac-plant-col:     0;
+  --ac-plant-row:     0;
+  --al-cause-size:    50px;   /* cause-of-death icon inside the LESSON modal */
+}
+
+/* --- Plant tray (Demo 01) ------------------------------------------------- */
+/* Tray frame removed for now — individual slot frames carry the look. We'll
+   revisit when the full game integrates and a wrapping frame makes sense. */
+#tray {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: var(--slot-gap);
+  background: var(--tray-bg);
+  box-sizing: border-box;
+}
+#tray .slots {
+  display: flex;
+  gap: var(--slot-gap);
+  align-items: center;
+}
+#tray .autopsy-stack {
+  margin-left: auto;
+  /* filled in Demo 05 */
+}
+
+.slot {
+  position: relative;
+  width: var(--slot-w);
+  height: var(--slot-h);
+  cursor: pointer;
+  border: var(--slot-border) solid transparent;
+  border-image: var(--slot-frame) var(--slot-slice) fill / var(--slot-border) / 0 stretch;
+  box-sizing: border-box;
+  transition: filter 120ms;
+}
+.slot.empty .plant-sprite,
+.slot.empty .pip-bar,
+.slot.empty .badge-stack { display: none; }
+
+/* Selection / active ring — drawn as a ::before pseudo so we can take a
+   border-radius (outline can't). --sel-offset of 0 rides the slot edge;
+   negative values inset the ring inward, positive values push it outward. */
+.slot::before {
+  content: '';
+  position: absolute;
+  inset: var(--sel-offset);
+  pointer-events: none;
+  border: 0 solid transparent;
+  border-radius: var(--sel-radius);
+  box-sizing: border-box;
+  z-index: 3;
+  transition: border-color 100ms, border-width 100ms;
+}
+.slot.selected::before {
+  border-width: var(--sel-width);
+  border-color: var(--sel-color);
+}
+.slot.active-in-room::before {
+  border-width: var(--sel-width);
+  border-color: var(--active-color);
+}
+.slot.dead { filter: grayscale(1) brightness(0.55); }
+.slot.dead::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('../sprites/icons/skull.png');
+  background-size: var(--skull-size) var(--skull-size);
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  opacity: var(--skull-opacity);
+  pointer-events: none;
+}
+.slot.harvestable {
+  animation: harvest-pulse 1.4s ease-in-out infinite;
+}
+@keyframes harvest-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0.55); }
+  50%     { box-shadow: 0 0 14px 4px rgba(0,255,136,0.55); }
+}
+
+/* --- Plant clip + sprite (inside slot) ------------------------------------
+   .plant-clip is a wrapper that fills the slot's INTERIOR (inside the frame
+   border) and clips its child sprite. This guarantees plant art never spills
+   over the slot frame even if --plant-size is cranked up.
+   Badge stack + pip bar are SIBLINGS of .plant-clip, so they remain unclipped
+   and badges can spill above the slot as designed. */
+/* inset: 0 lands at the slot's PADDING box (inside the border-width). The
+   --plant-clip-overflow var pushes the clip OUTWARD past the padding box and
+   into the border region, so the clip lines up with the actual VISIBLE
+   inner-edge of the 9-sliced bezel art (which is often closer to the slot
+   outer edge than the border-width value implies). */
+.plant-clip {
+  position: absolute;
+  inset: calc(var(--plant-clip-overflow) * -1);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Source cells are 85×85 in a 3×3 grid; we display each cell at --plant-size,
+   so the whole sheet renders at --plant-size × 3 on each axis, and we shift by
+   (--plant-col, --plant-row) to bring the desired cell into view.
+   Plant centers in the clip region with --plant-x-pad as a horizontal offset. */
+.plant-sprite {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(calc(-50% + var(--plant-x-pad)),
+                       calc(-50% + var(--plant-y-shift)));
+  width: var(--plant-size);
+  height: var(--plant-size);
+  background-repeat: no-repeat;
+  background-size: calc(var(--plant-size) * 3) calc(var(--plant-size) * 3);
+  background-position: calc(var(--plant-col) * var(--plant-size) * -1)
+                       calc(var(--plant-row) * var(--plant-size) * -1);
+  image-rendering: pixelated;
+}
+
+/* --- Health pip bar ------------------------------------------------------- */
+/* VERTICAL stack on the LEFT inside edge of the slot. Each pip is a wide-thin
+   horizontal bar; multiple stacked vertically read as a life-gauge column. */
+.pip-bar {
+  position: absolute;
+  left: var(--pip-x-pad);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pip-gap);
+  z-index: 2;
+}
+.pip {
+  width: var(--pip-w);
+  height: var(--pip-h);
+  background: var(--pip-healthy);
+  border: 1px solid #000;
+  box-sizing: content-box;
+}
+.pip.lost { background: var(--pip-empty); }
+.pip-bar.critical .pip:not(.lost) {
+  animation: pip-crit 0.55s ease-in-out infinite;
+}
+@keyframes pip-crit {
+  0%,100% { background: var(--pip-critical); }
+  50%     { background: var(--pip-healthy); }
+}
+
+/* --- Badge stack ---------------------------------------------------------- */
+/* OUTSIDE the slot — anchored to the TOP-RIGHT corner of the slot, sitting
+   above it on the game panel area. Rows are right-aligned (newest accumulates
+   to the right; older fills leftward in the same row). When a row fills,
+   the next row appears ABOVE the previous row.
+   max-width is computed from --badges-per-row so the row count is controllable. */
+.badge-stack {
+  position: absolute;
+  bottom: 100%;             /* sit just above the slot's top edge */
+  right: 2px;
+  max-width: calc(
+    var(--badges-per-row) * var(--badge-size) +
+    (var(--badges-per-row) - 1) * var(--badge-gap)
+  );
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap-reverse;   /* additional rows stack UPWARD */
+  justify-content: flex-end; /* hug right edge */
+  gap: var(--badge-gap);
+  overflow: var(--badge-overflow);
+  pointer-events: none;
+  z-index: 2;
+}
+.badge {
+  width: var(--badge-size);
+  height: var(--badge-size);
+  background-size: contain;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  cursor: help;
+  pointer-events: auto;
+  flex-shrink: 0;
+}
+
+/* --- Dead-tray container -------------------------------------------------- */
+/* Sits at the right end of #tray, beside the autopsy-stack slot column. */
+.dead-tray {
+  position: relative;
+  width: var(--dead-tray-w);
+  height: var(--dead-tray-h);
+  background-image: url('../sprites/plants/dead_tray.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.dead-tray-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: var(--dead-tray-badge);
+  height: var(--dead-tray-badge);
+  border-radius: 50%;
+  background: var(--dead-tray-badge-color);
+  border: 2px solid #000;
+  color: #fff;
+  display: none;            /* hidden until first death */
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pixel-font);
+  font-size: 9px;
+  line-height: 1;
+  box-shadow: 0 0 8px rgba(255, 68, 85, 0.55);
+}
+.dead-tray.has-deaths .dead-tray-badge { display: flex; }
+
+/* --- Autopsy review modal -----------------------------------------------
+   Overlays the GAME PANEL only (y:60..640) so the tray + dead-tray stay
+   interactive. The modal is appended to #game-panel by openAutopsyReview(). */
+.autopsy-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,var(--modal-bg-alpha));
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: autopsy-fade-in 180ms ease-out;
+}
+@keyframes autopsy-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.autopsy-modal .autopsy-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-family: var(--pixel-font);
+  font-size: 10px;
+  background: var(--bg-base);
+  color: var(--text);
+  border: 1px solid var(--accent-stop);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.autopsy-modal .autopsy-close:hover { background: var(--accent-stop); color: var(--bg-base); }
+.autopsy-modal .autopsy-empty {
+  color: var(--text);
+  font-family: var(--pixel-font);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* Centered grid layout — up to 4 cards per row, wraps to a new row above
+   when count > 4. Newest card sits at the bottom-right of the grid. */
+.autopsy-card-stack {
+  display: grid;
+  grid-template-columns: repeat(var(--card-cols, 1), var(--card-w));
+  grid-auto-rows: var(--card-h);
+  gap: var(--card-grid-gap);
+  justify-content: center;
+  align-content: center;
+  max-width: calc(4 * var(--card-w) + 3 * var(--card-grid-gap));
+}
+.autopsy-card {
+  position: relative;
+  width: var(--card-w);
+  height: var(--card-h);
+  background-image: url('../sprites/plants/autopsy_card.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  cursor: pointer;
+  transition: transform 200ms ease-out;
+  padding: 18px 14px 14px;
+  box-sizing: border-box;
+  font-family: var(--pixel-font);
+  font-size: 7px;
+  color: var(--text);
+  text-align: center;
+}
+.autopsy-card .ac-plant {
+  width: var(--ac-plant-size);
+  height: var(--ac-plant-size);
+  margin: var(--ac-plant-y) auto 6px;
+  background-repeat: no-repeat;
+  /* Sheet is a 3×3 grid; display each cell at --ac-plant-size, so the whole
+     sheet renders at 3 × that. --ac-plant-col / --ac-plant-row are set inline
+     per card by buildAutopsyCard() to pick the 'dead' stage cell. */
+  background-size: calc(var(--ac-plant-size) * 3) calc(var(--ac-plant-size) * 3);
+  background-position: calc(var(--ac-plant-col) * var(--ac-plant-size) * -1)
+                       calc(var(--ac-plant-row) * var(--ac-plant-size) * -1);
+  image-rendering: pixelated;
+}
+.autopsy-card .ac-name {
+  font-size: 8px;
+  color: var(--accent-go);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.autopsy-card .ac-cause-icon {
+  width: var(--ac-cause-size);
+  height: var(--ac-cause-size);
+  margin: 6px auto 4px;
+  background-repeat: no-repeat;
+  background-size: contain;
+  image-rendering: pixelated;
+}
+.autopsy-card .ac-cause-label {
+  font-size: 7px;
+  color: var(--accent-stop);
+  margin-bottom: 4px;
+}
+.autopsy-card .ac-details {
+  font-size: 7px;
+  line-height: 1.5;
+}
+.autopsy-card .ac-row {
+  display: block;
+  margin-bottom: 2px;
+}
+.autopsy-card {
+  cursor: pointer;
+  transition: transform 180ms ease-out, filter 120ms ease-out;
+  will-change: transform;
+}
+.autopsy-card:hover {
+  transform: translateY(-6px) scale(1.04);
+  filter: brightness(1.1) drop-shadow(0 6px 12px rgba(0,0,0,0.55));
+}
+.autopsy-card:active { transform: translateY(-2px) scale(1.01); }
+
+/* --- Autopsy lesson modal (Demo 16 stub) -------------------------------- */
+.autopsy-lesson {
+  position: absolute;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: autopsy-fade-in 180ms ease-out;
+}
+.autopsy-lesson-close {
+  position: absolute;
+  top: 12px; right: 12px;
+  font-family: var(--pixel-font);
+  font-size: 10px;
+  background: var(--bg-base);
+  color: var(--text);
+  border: 1px solid var(--accent-warn);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.autopsy-lesson-close:hover { background: var(--accent-warn); color: var(--bg-base); }
+.autopsy-lesson-body {
+  width: 560px;
+  max-width: calc(100% - 80px);
+  max-height: calc(100% - 60px);
+  background: var(--panel);
+  border: 2px solid var(--accent-warn);
+  padding: 22px 26px;
+  font-family: var(--pixel-font);
+  color: var(--text);
+  overflow-y: auto;
+}
+.autopsy-lesson .al-title {
+  color: var(--accent-go);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+.autopsy-lesson .al-cause {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #333;
+}
+.autopsy-lesson .al-cause-icon {
+  width: var(--al-cause-size);
+  height: var(--al-cause-size);
+  background-size: contain;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  flex-shrink: 0;
+}
+.autopsy-lesson .al-cause-label {
+  color: var(--accent-stop);
+  font-size: 11px;
+}
+/* Concept tag (chip above the lesson body) */
+.autopsy-lesson .al-concept {
+  display: inline-block;
+  font-size: 8px;
+  color: var(--accent-go);
+  border: 1px solid var(--accent-go);
+  border-radius: 3px;
+  padding: 3px 7px;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+}
+/* Lesson sections: heading + body paragraph */
+.autopsy-lesson .al-lesson { font-size: 9px; line-height: 1.7; color: var(--text-dim); }
+.autopsy-lesson .al-section + .al-section { margin-top: 12px; }
+.autopsy-lesson .al-sec-head {
+  color: var(--accent-warn);
+  font-size: 9px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.autopsy-lesson .al-section p { margin: 0; }
+.autopsy-lesson .al-space {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #333;
+  font-size: 8.5px;
+  line-height: 1.7;
+  color: var(--text);
+  font-style: italic;
+}
+
+/* --- Action zone (right end of tray) -------------------------------------
+   Rooms mount their commit button(s) into .action-zone on entry. Empty in
+   the hub. Supports 1 wide button (default) or 2 stacked buttons. */
+.action-zone {
+  flex-shrink: 0;
+  width: var(--action-zone-w);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--action-btn-gap);
+  padding: 4px 0;
+  box-sizing: border-box;
+}
+.action-zone.empty { opacity: 0.35; }
+
+.action-btn {
+  position: relative;
+  width: var(--action-btn-w);
+  height: var(--action-btn-h);
+  background-color: transparent;             /* let PNG transparency show */
+  background-image: url('../sprites/button_up.png');
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  cursor: pointer;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--pixel-font);
+  font-size: var(--action-btn-font-size);
+  line-height: var(--action-btn-line-height);
+  color: var(--action-btn-label-color);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  user-select: none;
+  text-align: center;
+  padding: 4px 10px;
+  box-sizing: border-box;
+}
+.action-btn-label {
+  display: inline-block;
+  line-height: inherit;
+}
+.action-btn:hover { filter: brightness(1.1); }
+.action-btn:active,
+.action-btn.pressed {
+  background-image: url('../sprites/button_down.png');
+}
+.action-btn:active .action-btn-label,
+.action-btn.pressed .action-btn-label {
+  transform: translate(var(--action-btn-press-x), var(--action-btn-press-y));
+}
+/* In 2-button mode, each button auto-fills half the zone height
+   minus half the gap. --action-btn-h is only used in 1-button mode. */
+.action-zone.two-btn .action-btn {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
+
+/* --- Devtools sidebar (Demo 01+) ----------------------------------------- */
+/* Right-side fixed-width control panel. Every demo can mount one via
+   Devtools.mount() in shared.js. Hidden in fullscreen mode. */
+.dt-page {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 16px;
+  padding: 20px;
+  min-height: 100vh;
+}
+.devtools-sidebar {
+  width: 360px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border: 1px solid #2a3040;
+  color: var(--text);
+  font-family: var(--pixel-font);
+  font-size: 9px;
+  line-height: 1.6;
+  padding: 14px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+.devtools-sidebar h2 {
+  font-size: 10px;
+  color: var(--accent-go);
+  letter-spacing: 1px;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+.devtools-sidebar h3 {
+  font-size: 8px;
+  color: var(--accent-warn);
+  letter-spacing: 1px;
+  margin: 14px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #2a3040;
+  text-transform: uppercase;
+}
+.dt-row {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 5px;
+}
+.dt-row label {
+  flex: 0 0 110px;
+  font-size: 9px;
+  color: var(--text-dim);
+}
+.dt-row input[type="range"]      { flex: 1; accent-color: var(--accent-warn); }
+.dt-row input[type="color"]      { width: 28px; height: 18px; padding: 0; border: 1px solid #444; background: transparent; cursor: pointer; }
+.dt-row input[type="number"]     { width: 60px; }
+.dt-row select                   { flex: 1; }
+.dt-row .val {
+  flex: 0 0 42px;
+  text-align: right;
+  font-size: 9px;
+  color: var(--text-dim);
+}
+.dt-row .val.modified { color: var(--accent-warn); font-weight: bold; }
+.dt-btn-row {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin: 4px 0 10px;
+}
+.dt-btn {
+  font-family: var(--pixel-font);
+  font-size: 8px;
+  background: var(--bg-base);
+  color: var(--text);
+  border: 1px solid var(--accent-warn);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.dt-btn:hover { background: var(--accent-warn); color: var(--bg-base); }
+.dt-btn.danger { border-color: var(--accent-stop); }
+.dt-btn.danger:hover { background: var(--accent-stop); color: var(--bg-base); }
+.dt-btn.go { border-color: var(--accent-go); }
+.dt-btn.go:hover { background: var(--accent-go); color: var(--bg-base); }
+.dt-header-row {
+  display: flex; gap: 6px; margin-bottom: 12px;
+}
+.dt-header-row .dt-btn { flex: 1; }
+.dt-note {
+  color: var(--text-dim);
+  font-size: 8px;
+  padding: 4px 0 8px;
+  line-height: 1.5;
+}
+
+/* --- Top bar (Demo 03+) --------------------------------------------------- */
+/* Persistent strip across the top of every screen — room name, food bar,
+   action counter. Background gradient matches the deep-space chrome aesthetic. */
+#top-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 18px;
+  background: linear-gradient(to bottom, #0d0d18, #050510);
+  border-bottom: 1px solid #1f1f30;
+  font-family: var(--pixel-font);
+  font-size: 10px;
+  color: var(--text);
+}
+.tb-room-name {
+  color: var(--accent-go);
+  font-size: 12px;
+  letter-spacing: 1px;
+  min-width: 220px;
+}
+.tb-food {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.tb-food-label {
+  color: var(--text-dim);
+  font-size: 9px;
+}
+.food-bar {
+  position: relative;
+  width: 360px;
+  height: 14px;
+  background: #0a0a14;
+  border: 1px solid #2a2a3a;
+  overflow: hidden;
+}
+.food-fill {
+  height: 100%;
+  background: var(--accent-go);
+  transition: width 220ms ease-out, background-color 220ms;
+}
+.food-fill.warn     { background: var(--accent-warn); }
+.food-fill.critical { background: var(--accent-stop); }
+.tb-food-num {
+  color: var(--text);
+  font-size: 9px;
+  min-width: 60px;
+}
+.tb-action-count {
+  color: var(--text-dim);
+  font-size: 9px;
+  margin-left: auto;
+}
+
+/* --- Hub map (Demo 03+) --------------------------------------------------- */
+/* Stack inside #game-panel:
+   1. #hub-layer (positioned absolutely, fills the 1280×580 panel)
+        ├── img.hub-base       — hub_locked.png, always opacity 1
+        ├── img.hub-room-img   — 9 cutouts, opacity 0 unless .unlocked
+        ├── img.hub-harvest-label  — center-mode swap when harvest-ready
+        └── div.hub-room       — invisible hotspot per room, hosts padlock/status
+   2. div.screen-layer (added during room transitions, slides in/out)
+   #game-panel itself is overflow:hidden so transitions don't bleed. */
+/* Additional #game-panel rules (layout positioning already declared above).
+   overflow: hidden so screen-layer slide transitions don't bleed into the
+   top-bar/tray. Solid black background hides the starfield when it's toggled
+   off (and acts as the void color when no starfield is mounted). */
+#game-panel {
+  overflow: hidden;
+  background: #000;
+}
+#hub-layer {
+  position: absolute;
+  inset: 0;
+  width: 1280px;
+  height: 580px;
+  transition: transform 300ms ease-out, opacity 300ms ease-out;
+  transform: translate3d(0, 0, 0);
+}
+.hub-base,
+.hub-room-img,
+.hub-harvest-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 580px;
+  pointer-events: none;
+  user-select: none;
+}
+.hub-room-img {
+  opacity: 0;
+  transition: opacity 320ms ease-out;
+}
+.hub-room-img.unlocked {
+  opacity: 1;
+}
+.hub-harvest-label {
+  /* PNG overlay — swaps SEED BAY for HARVEST ROOM on the center room. */
+  pointer-events: none;
+}
+
+/* Hotspot div — the clickable rect for each room, positioned by JS using
+   ROOMS[key].hotspot. Invisible by default; hosts padlock or status icon. */
+.hub-room {
+  position: absolute;
+  z-index: 5;
+  /* Outline for debugging — disabled in production via Devtools toggle. */
+}
+.hub-room.show-hotspots {
+  outline: 1px dashed rgba(0, 255, 136, 0.5);
+  background: rgba(0, 255, 136, 0.05);
+}
+.hub-room:hover {
+  /* Subtle "you can click this" cue on unlocked rooms */
+}
+.hub-room.hub-room-locked:hover { cursor: not-allowed; }
+.hub-room.hub-room-locked:hover .hub-padlock { filter: brightness(1.2); }
+
+/* Padlock — centered on the room. Sprite is square; --hub-padlock-size sets
+   both dimensions for live tweaking via Devtools. */
+.hub-padlock {
+  position: absolute;
+  width:  var(--hub-padlock-size, 56px);
+  height: var(--hub-padlock-size, 56px);
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.7));
+}
+
+/* Padlock fade-out — runs in parallel with the cutout's grayscale→color
+   fade-in during the 'unlocking' status. Both animations use the same
+   --unlock-fade-period so they finish together. forwards keeps the padlock
+   invisible at the end frame in case JS hasn't re-rendered yet. */
+.hub-padlock.fading-out {
+  animation: padlock-fade-out calc(var(--unlock-fade-period) * 1ms) ease-out forwards;
+}
+@keyframes padlock-fade-out {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* COMPLETE — small ✓ icon positioned on the hub-layer at the per-room anchor
+   (see COMPLETE_ANCHORS in shared.js). The icon's top-left lands at the anchor
+   coords. Sits above the cutouts but below the hotspots (z-index 5). */
+.hub-status-icon {
+  position: absolute;
+  width:  var(--hub-status-size, 28px);
+  height: var(--hub-status-size, 28px);
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.6));
+  z-index: 4;
+}
+
+/* Anchor-tuning mode — Demo 03 toggles `body.anchor-tuning-mode` on, marks
+   every room complete so all ✓s render, then the user drags each ✓ to its
+   banner end. Drag handler lives in the demo HTML. */
+body.anchor-tuning-mode .hub-status-icon {
+  pointer-events: auto;
+  cursor: grab;
+  outline: 2px dashed rgba(0, 255, 136, 0.6);
+  outline-offset: 2px;
+}
+body.anchor-tuning-mode .hub-status-icon:active { cursor: grabbing; }
+
+/* All room-status glows live on the .hub-room-img cutout, NOT the rectangular
+   .hub-room hotspot. `filter: drop-shadow()` follows the cutout PNG's alpha
+   channel, so the halo traces the actual irregular room outline.
+
+   Per-room hue: each room declares a `--room-glow` RGB triplet (R, G, B —
+   no `rgb(...)` wrapper) and the keyframes wrap it in `rgba(var(--room-glow),
+   alpha)` so a single keyframe block colorizes itself per room. To change a
+   room's color, edit just the RGB triplet in its data-key rule below. */
+.hub-room-img[data-key="substrate"]   { --room-glow: 204, 136, 102; } /* #cc8866 earth   */
+.hub-room-img[data-key="water"]       { --room-glow:  68, 136, 255; } /* #4488ff blue    */
+.hub-room-img[data-key="light"]       { --room-glow: 255, 204,   0; } /* #ffcc00 amber   */
+.hub-room-img[data-key="nutrients"]   { --room-glow: 255, 136,   0; } /* #ff8800 orange  */
+.hub-room-img[data-key="hydroponics"] { --room-glow:  34, 204, 255; } /* #22ccff cyan    */
+.hub-room-img[data-key="orientation"] { --room-glow: 255, 102, 204; } /* #ff66cc pink    */
+.hub-room-img[data-key="radiation"]   { --room-glow: 255,  68,  85; } /* #ff4455 red     */
+.hub-room-img[data-key="pollination"] { --room-glow: 204, 136, 255; } /* #cc88ff violet  */
+.hub-room-img[data-key="center"]      { --room-glow:   0, 255, 136; } /* #00ff88 go green (harvest) */
+
+/* Glow tuning knobs — peak blur (px), peak alpha (0..1), period (ms). Troughs
+   are locked at 0 alpha (or a small base alpha for in-progress) to keep the
+   pulse readable. Devtools sliders mutate these vars live.
+
+   Design rules these defaults encode:
+   - READY is the calm baseline. Other states are tuned RELATIVE to ready.
+   - Period encodes urgency: faster = more active (in-progress < harvest < ready).
+   - Trough alpha encodes "in use right now": in-progress has a non-zero base
+     so the room never goes fully dark while you're working it. */
+:root {
+  /* READY (baseline) — slow steady breath, full intensity. */
+  --glow-ready-blur:      12;
+  --glow-ready-alpha:     0.95;
+  --glow-ready-period:    2000;
+
+  /* IN PROGRESS — faster (60% of ready period), slightly bigger blur to convey
+     energy, residual 0.40 alpha so the glow never goes fully off. */
+  --glow-progress-blur:   14;
+  --glow-progress-alpha:  0.95;
+  --glow-progress-base-alpha: 0.40;
+  --glow-progress-period: 1200;
+
+  /* HARVEST READY (center only) — biggest blur (center is focal point), softer
+     peak alpha so it reads as a calm "come back" beacon (bible §5 calls it a
+     "soft green glow"), period faster than ready so it stands apart. */
+  --glow-harvest-blur:    18;
+  --glow-harvest-alpha:   0.85;
+  --glow-harvest-period:  1600;
+
+  /* COMPLETE — pulse off, steady halo. Smaller + dimmer than ready: the room
+     is past tense, not asking for attention. Per-room color stays as the
+     "you did this" marker. */
+  --glow-complete-blur:   8;
+  --glow-complete-alpha:  0.75;
+
+  /* Unlock fade — duration matches UNLOCK_FADE_MS in shared.js (don't drift). */
+  --unlock-fade-period:   800;
+}
+
+/* UNLOCKING — locked→ready transition. Cutout fades from invisible+grayscale
+   to fully visible + full color. forwards keeps the end frame so even if the
+   JS auto-advance to 'ready' is late, the visual sits at the right state. */
+.hub-room-img.unlocking {
+  animation: cutout-unlocking calc(var(--unlock-fade-period) * 1ms) ease-out forwards;
+}
+@keyframes cutout-unlocking {
+  0%   { opacity: 0; filter: grayscale(1) brightness(0.6); }
+  100% { opacity: 1; filter: grayscale(0) brightness(1); }
+}
+
+/* COMPLETE — pulse off, steady drop-shadow halo at --glow-complete-alpha.
+   The static glow keeps the per-room color cue visible while signaling "done".
+   `animation: none` defensively kills any inherited pulse keyframes. */
+.hub-room-img.status-complete {
+  opacity: 1;
+  animation: none;
+  filter: drop-shadow(
+    0 0
+    calc(var(--glow-complete-blur) * 1px)
+    rgba(var(--room-glow), var(--glow-complete-alpha))
+  );
+}
+
+/* READY — soft per-room halo pulse. Subtle; says "available, click here". */
+.hub-room-img.glow-ready {
+  animation: cutout-ready-pulse calc(var(--glow-ready-period) * 1ms) ease-in-out infinite;
+}
+@keyframes cutout-ready-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(var(--room-glow), 0)); }
+  50%      { filter: drop-shadow(0 0 calc(var(--glow-ready-blur) * 1px) rgba(var(--room-glow), var(--glow-ready-alpha))); }
+}
+
+/* IN PROGRESS — same hue, faster + brighter. "Operation running." */
+.hub-room-img.glow-in-progress {
+  animation: cutout-in-progress-pulse calc(var(--glow-progress-period) * 1ms) ease-in-out infinite;
+}
+@keyframes cutout-in-progress-pulse {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(var(--room-glow), var(--glow-progress-base-alpha))); }
+  50%      { filter: drop-shadow(0 0 calc(var(--glow-progress-blur) * 1px) rgba(var(--room-glow), var(--glow-progress-alpha))); }
+}
+
+/* HARVEST READY — only valid on the center room. Slow green glow pulse that
+   draws the eye back to the middle when produce is ready. Center's
+   --room-glow is set to accent-go green above. */
+.hub-room-img.glow-harvest {
+  animation: cutout-harvest-pulse calc(var(--glow-harvest-period) * 1ms) ease-in-out infinite;
+}
+@keyframes cutout-harvest-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(var(--room-glow), 0)); }
+  50%      { filter: drop-shadow(0 0 calc(var(--glow-harvest-blur) * 1px) rgba(var(--room-glow), var(--glow-harvest-alpha))); }
+}
+
+/* No just-unlocked flash — the steady ready glow is signal enough, and the
+   bright 3-cycle pulse was jarring. */
+
+/* Hub tooltip inherits .tooltip + .tt-* classes. One extra style: locked
+   hint line wraps and looks more like flavor text. */
+.tooltip .hub-unlock-hint {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-dim);
+  font-size: 8px;
+  line-height: 1.6;
+  max-width: 220px;
+  white-space: normal;
+}
+
+/* --- Screen transitions (Demo 03+) ---------------------------------------- */
+/* "Walking through a door" — the destination slides IN from its `dir`, while
+   the hub slides OUT in the inverse direction. Both happen simultaneously in
+   the same 300ms. Returning is symmetric (just swap which one is hub vs room).
+
+   Animation model: each direction has a `.slide-from-X` class that PLACES the
+   element offscreen on that edge; removing the class lets the default
+   transform: translate3d(0,0,0) re-apply, so CSS transitions the position
+   change automatically. `.slide-to-X` does the inverse (translate offscreen). */
+/* Hub-layer directional slides — slide only (no opacity fade). Fading the hub
+   from opacity 0 → 1 on return looked like every room briefly reverted to
+   "locked" (low parent opacity dims unlocked cutouts uniformly until the fade
+   completes). The slide alone is enough to read as "you're moving" — let the
+   .screen-layer fade carry the visual softness. Center keeps its scale-out. */
+#hub-layer.slide-to-left       { transform: translate3d(-100%, 0, 0); }
+#hub-layer.slide-to-right      { transform: translate3d( 100%, 0, 0); }
+#hub-layer.slide-to-up         { transform: translate3d(0, -100%, 0); }
+#hub-layer.slide-to-down       { transform: translate3d(0,  100%, 0); }
+#hub-layer.slide-to-up-left    { transform: translate3d(-100%, -100%, 0); }
+#hub-layer.slide-to-up-right   { transform: translate3d( 100%, -100%, 0); }
+#hub-layer.slide-to-down-left  { transform: translate3d(-100%,  100%, 0); }
+#hub-layer.slide-to-down-right { transform: translate3d( 100%,  100%, 0); }
+#hub-layer.slide-to-center     { opacity: 0; transform: scale(1.1); }
+
+.screen-layer {
+  position: absolute;
+  inset: 0;
+  width: 1280px;
+  height: 580px;
+  z-index: 20;
+  transition: transform 300ms ease-out, opacity 300ms ease-out;
+  transform: translate3d(0, 0, 0);
+}
+.screen-layer.slide-from-left       { opacity: 0; transform: translate3d(-100%, 0, 0); }
+.screen-layer.slide-from-right      { opacity: 0; transform: translate3d( 100%, 0, 0); }
+.screen-layer.slide-from-up         { opacity: 0; transform: translate3d(0, -100%, 0); }
+.screen-layer.slide-from-down       { opacity: 0; transform: translate3d(0,  100%, 0); }
+.screen-layer.slide-from-up-left    { opacity: 0; transform: translate3d(-100%, -100%, 0); }
+.screen-layer.slide-from-up-right   { opacity: 0; transform: translate3d( 100%, -100%, 0); }
+.screen-layer.slide-from-down-left  { opacity: 0; transform: translate3d(-100%,  100%, 0); }
+.screen-layer.slide-from-down-right { opacity: 0; transform: translate3d( 100%,  100%, 0); }
+.screen-layer.slide-from-center     { opacity: 0; transform: scale(0.9); }
+
+/* --- Placeholder room screen (Demo 03 only) ------------------------------- */
+/* Used by all 9 rooms in Demo 03. Later demos replace the placeholder with the
+   real room implementation; the back-to-hub button + title pattern survives. */
+.screen-placeholder {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--pixel-font);
+}
+.screen-placeholder .screen-title {
+  color: var(--accent-go);
+  font-size: 18px;
+  letter-spacing: 2px;
+}
+.screen-placeholder .screen-sub {
+  color: var(--text-dim);
+  font-size: 9px;
+}
+.back-to-hub {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  font-family: var(--pixel-font);
+  font-size: 10px;
+  background: transparent;
+  color: var(--accent-go);
+  border: 1px solid var(--accent-go);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.back-to-hub:hover {
+  background: var(--accent-go);
+  color: var(--bg-base);
+}
+
+/* --- Hub tweakable knobs (Demo 03) ---------------------------------------- */
+:root {
+  --hub-padlock-size:  56px;
+  --hub-status-size:   28px;
+  --hub-status-pad:    4px;
+  --slide-duration:    300ms;
+}
+
+/* --- Fullscreen mode ------------------------------------------------------ */
+/* "Hide sidebar, scale stage to viewport". The scale value (--fs-scale) is
+   computed in JS by Devtools.applyFullscreenScale() — CSS transform: scale()
+   only accepts a unitless number, so a pure-CSS min(100vw/1280, …) won't work. */
+body.fullscreen-mode                   { background: var(--bg-base); overflow: hidden; }
+body.fullscreen-mode .devtools-sidebar { display: none; }
+body.fullscreen-mode .dt-page {
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  justify-content: center;
+  align-items: center;
+}
+body.fullscreen-mode #stage {
+  flex-shrink: 0;
+  transform: scale(var(--fs-scale, 1));
+  transform-origin: center center;
+}
+
+/* Floating exit button in fullscreen — pinned top-right of viewport. */
+.fs-exit {
+  display: none;
+  position: fixed; top: 8px; right: 8px;
+  z-index: 9999;
+}
+body.fullscreen-mode .fs-exit { display: inline-block; }
+
+
+/* ==========================================================================
+   Reusable card flip (Demo 04) — rotateY around the element's center.
+   Container needs an explicit size; both faces are absolutely-positioned and
+   backface-hidden so only the front shows until .flipped is toggled.
+   ========================================================================== */
+.card-flip {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 500ms ease;
+  cursor: pointer;
+}
+.card-flip.flipped { transform: rotateY(180deg); }
+.card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.card-face.back { transform: rotateY(180deg); }
+
+
+/* ==========================================================================
+   Demo 04 — Seed Bank screen
+   ========================================================================== */
+.seedbank-screen {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  font-family: var(--pixel-font);
+  overflow: hidden;
+}
+.sb-bg {
+  position: absolute;
+  inset: 0;
+  width: 1280px;
+  height: 580px;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* --- rack of packet thumbnails ------------------------------------------- */
+.sb-rack { position: absolute; inset: 0; }
+
+.sb-rack-packet {
+  position: absolute;
+  cursor: pointer;
+  transform-origin: center center;   /* zoom straight toward the viewer */
+  transition: transform 120ms ease, filter 120ms ease;
+  will-change: transform;
+}
+.sb-rack-packet:hover { transform: scale(1.18); z-index: 3; }
+.sb-rack-packet.locked { cursor: default; }
+.sb-rack-packet.locked:hover { transform: none; }
+
+/* a packet face: frame PNG + composited plant (+ details on the big card) */
+.sb-packet-face {
+  position: absolute;
+  inset: 0;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.sb-packet-plant {
+  position: absolute;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* locked overlay (seedinfo_locked.png) — desaturated frame + padlock */
+.sb-lock {
+  position: absolute;
+  inset: 0;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  display: none;
+  pointer-events: none;
+}
+.sb-rack-packet.locked .sb-lock { display: block; }
+
+/* --- big floating card overlay (lives on #stage so it can fly to the tray) */
+.sb-float-layer { position: absolute; inset: 0; z-index: 40; }
+.sb-float-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 5, 15, 0);
+  transition: background 380ms ease;
+}
+.sb-float-layer.open   .sb-float-backdrop { background: rgba(5, 5, 15, 0.72); }
+.sb-float-layer.taking .sb-float-backdrop { background: rgba(5, 5, 15, 0); }
+
+.sb-float-wrap {
+  position: absolute;
+  transition: transform 380ms cubic-bezier(0.2, 0.8, 0.25, 1), opacity 380ms ease;
+}
+/* Put-back: the detail (name + trait boxes) fades first as the card shrinks onto
+   the rack thumbnail; then the WHOLE card fades out over the final ~100ms so any
+   sub-pixel misalignment with the shelf packet is gone before removal (no snap). */
+.sb-float-wrap.putting-back {
+  opacity: 0;
+  transition: transform 380ms cubic-bezier(0.2, 0.8, 0.25, 1), opacity 100ms ease 280ms;
+}
+.sb-float-wrap.putting-back .sb-card-name,
+.sb-float-wrap.putting-back .sb-trait-box {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.sb-float-buttons {
+  position: absolute;
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 150ms ease;   /* fade OUT immediately as the card animates away */
+}
+/* fade IN is delayed until the card has arrived at centre */
+.sb-float-layer.open   .sb-float-buttons { opacity: 1; transition: opacity 200ms ease 120ms; }
+.sb-float-layer.taking .sb-float-buttons { opacity: 0; transition: opacity 100ms ease; }
+.sb-float-btn {
+  flex: 1;
+  font-family: var(--pixel-font);
+  font-size: 10px;
+  padding: 9px 6px;
+  background: var(--panel);
+  color: var(--text);
+  border: 2px solid #444;
+  cursor: pointer;
+}
+.sb-float-btn.take { border-color: var(--accent-go);   color: var(--accent-go); }
+.sb-float-btn.put  { border-color: var(--accent-warn); color: var(--accent-warn); }
+.sb-float-btn.take:hover { background: var(--accent-go);   color: var(--bg-base); }
+.sb-float-btn.put:hover  { background: var(--accent-warn); color: var(--bg-base); }
+
+/* fly-back packet when a planted seed is returned from the tray to the rack */
+.sb-return-fly {
+  position: absolute;
+  z-index: 120;   /* above the tray (100) so it's visible the whole way up */
+  pointer-events: none;
+}
+
+/* --- card front detail: name label + 4 trait boxes ----------------------- */
+.sb-card-name {
+  position: absolute;
+  left: var(--sb-name-side, 17%);
+  right: var(--sb-name-side, 17%);
+  top: var(--sb-name-top, 7%);
+  height: var(--sb-name-height, 14%);
+  display: flex;
+  align-items: center;          /* vertically center the name in the label band */
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* inner span fills the band and wraps; --sb-name-fs is the MAX, fitSeedBankName()
+   shrinks it (inline) until it fits the band's width AND height. */
+.sb-card-name span {
+  display: block;
+  width: 100%;
+  flex: none;
+  text-align: center;
+  line-height: 1.05;
+  font-size: var(--sb-name-fs, 20px);
+  color: #20240f;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.sb-trait-box {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.sb-trait-icon {
+  width: 72%;
+  height: 58%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+}
+.sb-trait-icon.poll { width: 88%; height: 86%; }
+.sb-trait-pips { display: flex; gap: 2px; }
+.sb-pip {
+  width: 4px;
+  height: 4px;
+  background: #2a2a2a;
+  border: 1px solid #000;
+  box-sizing: border-box;
+}
+/* lit pips take the trait box's category color (currentColor) */
+.sb-pip.on { background: currentColor; border-color: currentColor; }
+
+/* --- card back: info frame + JS trait rows -------------------------------- */
+.sb-packet-back {
+  position: absolute;
+  inset: 0;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.sb-back-title {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  top: var(--sb-back-title-top, 4%);
+  height: var(--sb-back-title-height, 8%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--accent-go);
+  font-size: var(--sb-back-title-fs, 12.5px);
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Two independent row groups so the wider divider between the top 4 (visible)
+   and bottom 4 (hidden) bands is honored. Rows within a group stay even. */
+.sb-back-rows {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  display: flex;
+  flex-direction: column;
+}
+.sb-back-rows.group-top {
+  top:    var(--sb-back-top-top, 13.5%);
+  height: var(--sb-back-top-height, 40.5%);
+}
+.sb-back-rows.group-bottom {
+  top:    var(--sb-back-bot-top, 59%);
+  height: var(--sb-back-bot-height, 37.5%);
+}
+.sb-back-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: var(--sb-back-fs, 9.5px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.sb-back-row:last-child { border-bottom: none; }
+/* label color comes from its tt-cat-* class (matches the tray tooltips) */
+.sb-back-label { white-space: nowrap; }
+.sb-back-value { color: var(--text); text-transform: capitalize; text-align: right; }
+.sb-back-row.dim { opacity: 0.5; }   /* hidden traits: same category tint, dimmed */
+
+/* --- Done-picking warning shake + confirm/warn modal --------------------- */
+@keyframes sb-shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-5px); }
+  30% { transform: translateX(5px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(3px); }
+  75% { transform: translateX(-2px); }
+}
+/* Warn flash: shake + reden the golden button sprite via a colorize filter
+   (no border outline). The filter tints the whole button incl. its label. */
+.action-btn.sb-warn {
+  animation: sb-shake 0.42s ease;
+  filter: sepia(1) saturate(7) hue-rotate(-30deg) brightness(0.95);
+}
+
+.sb-confirm-layer {
+  position: absolute;
+  inset: 0;
+  /* Above the tray (z-index 100), like the autopsy modal (1000): the dim + the
+     backdrop's click-blocking cover the whole screen, so the Done button and
+     dead tray underneath are darkened AND non-interactive. */
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, var(--modal-bg-alpha));
+  font-family: var(--pixel-font);
+}
+.sb-confirm {
+  width: 380px;
+  max-width: 78%;
+  background: var(--panel);
+  border: 2px solid var(--accent-warn);
+  box-shadow: 0 0 0 1px var(--bg-base), 0 10px 34px rgba(0, 0, 0, 0.6);
+  padding: 20px 20px 16px;
+  text-align: center;
+}
+.sb-confirm.warn { border-color: var(--accent-stop); }
+.sb-confirm-title {
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--accent-warn);
+  margin-bottom: 12px;
+}
+.sb-confirm.warn .sb-confirm-title { color: var(--accent-stop); }
+.sb-confirm-msg {
+  font-size: 9px;
+  line-height: 1.8;
+  color: var(--text);
+  margin-bottom: 18px;
+}
+.sb-confirm-msg b { color: var(--accent-go); }
+.sb-confirm-btns { display: flex; gap: 10px; justify-content: center; }
+.sb-confirm-btn {
+  font-family: var(--pixel-font);
+  font-size: 9px;
+  padding: 9px 12px;
+  cursor: pointer;
+  background: var(--bg-base);
+  color: var(--text);
+  border: 2px solid #444;
+}
+.sb-confirm-btn.cancel { border-color: var(--accent-go); color: var(--accent-go); }
+.sb-confirm-btn.cancel:hover { background: var(--accent-go); color: var(--bg-base); }
+.sb-confirm-btn.ok { border-color: var(--accent-warn); color: var(--accent-warn); }
+.sb-confirm-btn.ok:hover { background: var(--accent-warn); color: var(--bg-base); }
+.sb-confirm.warn .sb-confirm-btn.ok { border-color: var(--accent-stop); color: var(--accent-stop); }
+.sb-confirm.warn .sb-confirm-btn.ok:hover { background: var(--accent-stop); color: var(--bg-base); }
+
+
+/* ============================================================================
+   Demo 05 — Substrate Lab
+   Bench circles (substrate icon + seedling drop points) + rack-panel click
+   targets over the baked rack art. Positions come from SUBSTRATE_CIRCLES /
+   SUBSTRATE_RACK (measured in demos/05a-substrate-coords.html); the room sets
+   left/top/width/height inline, the look lives here.
+   ============================================================================ */
+.substrate-screen {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  font-family: var(--pixel-font);
+  overflow: hidden;
+}
+.sub-bg {
+  position: absolute;
+  inset: 0;
+  width: 1280px;
+  height: 580px;
+  user-select: none;
+  pointer-events: none;
+}
+/* The two overlay containers fill the panel; they must NOT eat clicks meant for
+   the rack panels / bench circles beneath them — only the interactive children
+   below opt back in to pointer events. (Without this the .sub-bench overlay sat
+   on top of .sub-rack and swallowed every rack click.) */
+.sub-rack, .sub-bench { position: absolute; inset: 0; pointer-events: none; }
+
+/* --- guidance banner ---------------------------------------------------- */
+.sub-banner {
+  position: absolute;
+  top: var(--sub-banner-top, 388px);
+  left: var(--sub-banner-left, 622px);
+  transform: translateX(-50%);
+  z-index: 30;
+  pointer-events: none;
+  background: rgba(6, 10, 18, 0.85);
+  border: 1px solid var(--accent-warn);
+  border-radius: 5px;
+  padding: var(--sub-banner-pad-y, 10px) var(--sub-banner-pad-x, 10px);
+  font-family: var(--pixel-font);
+  font-size: var(--sub-banner-fs, 10px);
+  line-height: 1.35;
+  letter-spacing: 0.5px;
+  color: var(--accent-warn);
+  white-space: nowrap;
+  text-align: center;
+}
+@keyframes sub-banner-flash { 0%,100% { transform: translateX(-50%) scale(1); } 30% { transform: translateX(-50%) scale(1.08); } }
+.sub-banner.flash { animation: sub-banner-flash 320ms ease; border-color: var(--accent-warn); color: var(--accent-warn); }
+
+/* --- rack panels (polygon click targets, brighten-on-select, no border) -- */
+/* clip-path (set inline from the measured points) shapes both the visible
+   highlight and the hit area. Highlight = brighten the baked pixels beneath via
+   backdrop-filter; no border. pH/Drainage/Aeration live in the hover tooltip. */
+.sub-panel {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: auto;
+  cursor: pointer;
+  backdrop-filter: brightness(1);
+  -webkit-backdrop-filter: brightness(1);
+  transition: backdrop-filter 120ms ease, -webkit-backdrop-filter 120ms ease;
+}
+.sub-panel:hover  { backdrop-filter: brightness(1.22); -webkit-backdrop-filter: brightness(1.22); }
+.sub-panel.chosen { backdrop-filter: brightness(1.38) saturate(1.12); -webkit-backdrop-filter: brightness(1.38) saturate(1.12); }
+@keyframes sub-panel-pulse {
+  0%,100% { backdrop-filter: brightness(1.08); -webkit-backdrop-filter: brightness(1.08); }
+  50%     { backdrop-filter: brightness(1.5);  -webkit-backdrop-filter: brightness(1.5); }
+}
+.sub-panel.pulse { animation: sub-panel-pulse 1.1s ease-in-out infinite; }
+
+/* --- bench ovals (matching the recesses) -------------------------------- */
+.sub-circle {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);   /* left/top are the CENTER; w/h set inline */
+  border-radius: 50%;                 /* w≠h → ellipse */
+  border: 2px dashed rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 160ms ease;
+}
+.sub-circle:hover { border-color: rgba(255, 255, 255, 0.4); }
+/* The spot currently being set up. */
+.sub-circle.active {
+  border-style: solid;
+  border-color: var(--accent-go);
+  box-shadow: 0 0 12px 3px rgba(0, 255, 136, 0.55);
+}
+/* "Choose a spot" cue — empty/unfinished ovals invite a click. */
+@keyframes sub-spot-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); } 50% { box-shadow: 0 0 12px 3px rgba(0,255,136,0.55); } }
+.sub-circle.pulse {
+  border-style: solid;
+  border-color: rgba(0, 255, 136, 0.6);
+  animation: sub-spot-pulse 1.1s ease-in-out infinite;
+}
+/* Substrate fills the oval: the framed tile is zoomed past the edge (inline
+   background-size from SUB_TUNE.fillZoom) and clipped to the ellipse by
+   border-radius, so the recess looks filled and the PNG frame is cropped out. */
+.sub-circle .sub-icon {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 115%;
+  image-rendering: pixelated;
+}
+/* Clear ✕ — pinned to the active spot's right edge, vertically centered. */
+.sub-clear {
+  position: absolute;
+  top: 50%; right: -10px;
+  transform: translateY(-50%);
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(20, 8, 8, 0.92);
+  color: var(--accent-stop);
+  border: 1px solid var(--accent-stop);
+  border-radius: 50%;
+  font: 16px/1 sans-serif;   /* '×' glyph, centered by the flex box */
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 4;
+}
+.sub-clear:hover { background: var(--accent-stop); color: #fff; }
+/* Seedling sits on top; size set inline, vertical offset Devtools-tunable. */
+.sub-circle .sub-seedling {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, calc(-50% + var(--sub-seedling-dy, -7px)));
+  z-index: 2;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+}
+
+/* --- resolution flash (Plant Seeds) ------------------------------------- */
+@keyframes sub-flash-correct  { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0);   } 35% { box-shadow: 0 0 16px 5px rgba(0,255,136,0.85);  } }
+@keyframes sub-flash-tolerated{ 0%,100% { box-shadow: 0 0 0 0 rgba(255,204,0,0);   } 35% { box-shadow: 0 0 16px 5px rgba(255,204,0,0.85);  } }
+@keyframes sub-flash-stress   { 0%,100% { box-shadow: 0 0 0 0 rgba(255,64,64,0);   } 35% { box-shadow: 0 0 16px 5px rgba(255,64,64,0.9);   } }
+.sub-circle.flash-correct   { animation: sub-flash-correct   620ms ease-in-out; border-color: var(--accent-go); }
+.sub-circle.flash-tolerated { animation: sub-flash-tolerated 620ms ease-in-out; border-color: var(--accent-warn); }
+.sub-circle.flash-stress    { animation: sub-flash-stress    620ms ease-in-out; border-color: var(--accent-stop); }
+
+/* Seedling fly-back layer (bench → tray). Lives on #stage like other cross-
+   container fly animations so it isn't clipped by #game-panel. */
+.sub-fly {
+  position: absolute;
+  z-index: 200;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+  transition: left 420ms cubic-bezier(0.5, 0, 0.6, 1),
+              top  420ms cubic-bezier(0.5, 0, 0.6, 1),
+              width 420ms ease, height 420ms ease, opacity 420ms ease;
+}
+
+/* Action-button "can't do that yet" shake (e.g. Plant Seeds with nothing ready). */
+@keyframes action-nope { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-4px); } 40%,80% { transform: translateX(4px); } }
+.action-btn.nope { animation: action-nope 300ms ease; }
+
+/* Guided-flow "do this next" pulses — Plant Seeds button + unplanted tray seeds.
+   The button glow uses filter:drop-shadow so it traces the button PNG's alpha
+   shape, not a rectangular box. */
+@keyframes sub-btn-pulse  { 0%,100% { filter: drop-shadow(0 0 0 rgba(0,255,136,0)); } 50% { filter: drop-shadow(0 0 6px rgba(0,255,136,0.95)); } }
+.action-btn.pulse { animation: sub-btn-pulse 1.1s ease-in-out infinite; }
+@keyframes sub-seed-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); } 50% { box-shadow: 0 0 10px 2px rgba(0,255,136,0.7); } }
+.slot.seed-pulse { animation: sub-seed-pulse 1.1s ease-in-out infinite; border-radius: 4px; }
+
+/* A tray plant already placed on a bench spot: dimmed + desaturated, with a
+   "planted" tag, so it reads as unavailable until put back. */
+.slot.sub-used .plant-clip { opacity: 0.4; filter: grayscale(0.5); }
+.slot.sub-used::after {
+  content: 'PLANTED';
+  position: absolute;
+  left: 50%; bottom: var(--sub-used-bottom, 21px);
+  transform: translateX(-50%);
+  font-family: var(--pixel-font);
+  font-size: var(--sub-used-fs, 8.5px);
+  letter-spacing: 0.5px;
+  color: var(--sub-used-color, #fefb00);
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0 3px;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+
+/* ============================================================================
+   Demo 06 — Pipe Maze (Water Delivery)
+   Mirrors the Substrate Lab structure: full-panel bg + an overlay of interactive
+   controls (valves, dials, gauges, ports) + a guided banner. The SVG layer draws
+   the animated traveling-water fill over the baked pipes. Generic pieces
+   (.room-banner, gauge, valve/dial, .fx-burst) are reused by later rooms.
+   ============================================================================ */
+.pipe-screen {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  font-family: var(--pixel-font);
+  overflow: hidden;
+}
+.pipe-bg {
+  position: absolute;
+  inset: 0;
+  width: 1280px;
+  height: 580px;
+  user-select: none;
+  pointer-events: none;
+}
+/* Traveling-fill layer — bright water over the baked pipes. */
+.pipe-paths { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.pipe-flow {
+  fill: none;
+  stroke: #7fd4ff;
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  filter: drop-shadow(0 0 4px rgba(127, 212, 255, 0.9));
+}
+/* Overlay container — must not eat clicks; interactive children opt back in.
+   Sits ABOVE the .pipe-flow layer so the traveling water reads as flowing
+   BEHIND the dials/gauges/ports. */
+.pipe-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+
+/* --- generic guidance banner (reusable by any room) --------------------- */
+.room-banner {
+  position: absolute;
+  /* --room-banner-top is the banner's CENTER y (translateY -50%), so adding
+     lines grows it symmetrically around the same anchor instead of downward. */
+  top: var(--room-banner-top, 320px);
+  left: var(--room-banner-left, 775px);
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  pointer-events: none;
+  background: rgba(6, 10, 18, 0.85);
+  border: 1px solid var(--accent-warn);
+  border-radius: 5px;
+  padding: var(--room-banner-pad-y, 9px) var(--room-banner-pad-x, 12px);
+  font-family: var(--pixel-font);
+  font-size: var(--room-banner-fs, 12px);
+  line-height: 1.35;
+  letter-spacing: 0.5px;
+  color: var(--accent-warn);
+  max-width: var(--room-banner-max-w, 265px);
+  white-space: normal;
+  text-align: center;
+}
+@keyframes room-banner-flash { 0%,100% { transform: translate(-50%, -50%) scale(1); } 30% { transform: translate(-50%, -50%) scale(1.08); } }
+.room-banner.flash { animation: room-banner-flash 320ms ease; }
+
+/* --- valves (3-frame wheel sprite; click toggles) ----------------------- */
+.pipe-valve {
+  position: absolute;
+  transform: translate(-50%, -50%);   /* left/top are the CENTER */
+  pointer-events: auto;
+  cursor: pointer;
+  image-rendering: pixelated;
+  transition: filter 140ms ease;
+}
+.pipe-valve.open   { filter: drop-shadow(0 0 5px rgba(0, 255, 136, 0.95)); }
+.pipe-valve.closed { filter: drop-shadow(0 0 5px rgba(255, 64, 64, 0.95)); }
+@keyframes pipe-spin { from { transform: translate(-50%, -50%) rotate(0); } to { transform: translate(-50%, -50%) rotate(120deg); } }
+.pipe-valve.turning { animation: pipe-spin 150ms linear; }
+@keyframes pipe-ctrl-pulse { 0%,100% { filter: drop-shadow(0 0 2px rgba(0,255,136,0.4)); } 50% { filter: drop-shadow(0 0 8px rgba(0,255,136,0.95)); } }
+.pipe-valve.pulse:not(.open):not(.closed) { animation: pipe-ctrl-pulse 1.1s ease-in-out infinite; }
+
+/* --- dials + source (overlay needle on the baked wheel) ----------------- */
+.pipe-dial, .pipe-source {
+  position: absolute;
+  transform: translate(-50%, -50%);   /* left/top are the CENTER */
+  border-radius: 50%;
+}
+.pipe-dial {
+  pointer-events: auto;
+  cursor: grab;
+  border: 2px solid rgba(60, 80, 100, 0.7);
+  background: #ffffff;   /* solid white face — fully occludes the water flowing behind it */
+}
+.pipe-dial:hover { border-color: var(--accent-go); }
+.pipe-dial:active { cursor: grabbing; }
+.pipe-source { pointer-events: auto; }
+.pipe-dial .needle, .pipe-source .needle {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 3px; height: 46%;
+  background: var(--accent-warn);
+  border-radius: 2px;
+  transform-origin: 50% 100%;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+  z-index: 2;
+}
+.pipe-dial .hub, .pipe-source .hub {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 6px; height: 6px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--accent-warn);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+  z-index: 3;
+}
+/* Reservoir tank readout: black needle + a draining semi-transparent water disc
+   clipped to the dial circle (water level drops as the run's tank depletes). */
+.pipe-source .needle { background: #111; }
+.pipe-source .hub { background: #111; }
+.pipe-source .tank-disc {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+.pipe-source .tank-level {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 100%;
+  background: rgba(95, 188, 255, 0.45);
+  transition: height 220ms ease;
+}
+@keyframes pipe-dial-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,204,0,0); } 50% { box-shadow: 0 0 10px 2px rgba(255,204,0,0.7); } }
+.pipe-dial.pulse { animation: pipe-dial-pulse 1.1s ease-in-out infinite; border-color: rgba(255, 204, 0, 0.7); }
+
+/* Live % readout floating above a dial while tuning — instant follow, then a
+   gentle fade once you let go. left/top set inline (the dial centre). */
+.dial-readout {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  z-index: 10;
+  pointer-events: none;
+  background: rgba(6, 10, 18, 0.92);
+  border: 1px solid var(--accent-go);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font: 11px var(--pixel-font);
+  color: #7fd4ff;
+  white-space: nowrap;
+  opacity: 0;
+}
+.dial-readout.show   { opacity: 1; transition: none; }              /* live, no lag while dragging */
+.dial-readout.fading { opacity: 0; transition: opacity 480ms ease; } /* gentle fade on release */
+
+/* Permanent live capacity label under the reservoir tank (same look as the dial
+   readout). left/top set inline (below the tank); dx/dy/fs are Devtools knobs. */
+.tank-label {
+  position: absolute;
+  transform: translate(calc(-50% + var(--tank-label-dx, 0px)), var(--tank-label-dy, 23px));
+  z-index: 10;
+  pointer-events: none;
+  background: rgba(6, 10, 18, 0.92);
+  border-radius: 4px;
+  padding: var(--tank-label-pad, 4px);
+  font: var(--tank-label-fs, 12px) var(--pixel-font);
+  color: #7fd4ff;
+  white-space: nowrap;
+}
+
+/* --- gauges (vertical fill bar + target band) --------------------------- */
+.pipe-gauge {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  background: rgba(8, 14, 24, 0.55);
+  border: 1px solid rgba(127, 212, 255, 0.4);
+  border-radius: 2px;
+  overflow: hidden;
+}
+/* No target marks — the player guesses the dial. Fill is neutral BLUE while
+   setting (preview), then reveals green/yellow/red by proximity on Pressurize. */
+.pipe-gauge .gauge-fill {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 0;
+  opacity: 0.9;
+  background: #5fbcff;
+  transition: height 160ms ease, background-color 160ms ease;
+}
+.pipe-gauge .gauge-fill.preview { background: #5fbcff; }            /* where the dial is set */
+.pipe-gauge .gauge-fill.far     { background: var(--accent-stop); } /* way off */
+.pipe-gauge .gauge-fill.near    { background: var(--accent-warn); } /* close */
+.pipe-gauge .gauge-fill.ok      { background: var(--accent-go); }   /* dead on */
+
+/* --- ports (plant drop targets) ----------------------------------------- */
+.pipe-port {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: auto;
+  cursor: pointer;
+  border: 2px solid transparent;     /* no resting outline — the boxes are baked into the art */
+  border-radius: 4px;
+  transition: border-color 120ms ease, box-shadow 160ms ease;
+}
+.pipe-port:hover { border-color: rgba(255, 255, 255, 0.28); }
+.pipe-port.active {
+  border-style: solid;
+  border-color: var(--accent-go);
+  box-shadow: 0 0 12px 3px rgba(0, 255, 136, 0.5);
+}
+@keyframes pipe-port-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); } 50% { box-shadow: 0 0 12px 3px rgba(0,255,136,0.55); } }
+.pipe-port.pulse { border-style: solid; border-color: rgba(0, 255, 136, 0.6); animation: pipe-port-pulse 1.1s ease-in-out infinite; }
+.pipe-port .port-plant {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background-repeat: no-repeat;
+  background-position: center;
+  image-rendering: pixelated;
+}
+/* Growth pop — plays when a plant advances a stage on Pressurize. */
+@keyframes pipe-grow-pop {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  45% { transform: translate(-50%, -50%) scale(1.28); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+.pipe-port .port-plant.grow-pop { animation: pipe-grow-pop 360ms ease; }
+.pipe-clear {
+  position: absolute;
+  top: -10px; right: -10px;
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(20, 8, 8, 0.92);
+  color: var(--accent-stop);
+  border: 1px solid var(--accent-stop);
+  border-radius: 50%;
+  font: 16px/1 sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 4;
+}
+.pipe-clear:hover { background: var(--accent-stop); color: #fff; }
+
+/* Resolution flash by grade — reuse the substrate flash keyframes (green/amber/red). */
+.pipe-gauge.flash-ok,   .pipe-port.flash-ok   { animation: sub-flash-correct   620ms ease-in-out; }
+.pipe-gauge.flash-near, .pipe-port.flash-near { animation: sub-flash-tolerated 620ms ease-in-out; }
+.pipe-gauge.flash-far,  .pipe-port.flash-far  { animation: sub-flash-stress    620ms ease-in-out; }
+
+/* Tray decoration: a plant currently sitting in a port (dimmed), and one already
+   watered this visit (dimmed + "WATERED" tag + locked from re-placement). */
+.slot.pipe-inport .plant-clip { opacity: 0.5; }
+.slot.pipe-done .plant-clip { opacity: 0.4; filter: grayscale(0.5); }
+.slot.pipe-done::after {
+  content: 'WATERED';
+  position: absolute;
+  left: calc(50% + var(--pipe-done-dx, 9px));   /* horizontal nudge (Devtools) */
+  bottom: var(--pipe-done-bottom, 17px);
+  transform: translateX(-50%);
+  font-family: var(--pixel-font);
+  font-size: var(--pipe-done-fs, 9px);
+  letter-spacing: 0.5px;
+  color: #7fd4ff;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0 3px;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+/* Canvas particle burst (gauge overflow spray) — lives on #stage, above tray. */
+.fx-burst {
+  position: absolute;
+  left: 0; top: 0;
+  width: 1280px; height: 720px;
+  pointer-events: none;
+  z-index: 200;
+}
+
+
+/* ============================================================================
+   Demo 07 — Light Lab (Bible §6C)
+   Same shape as the Pipe Maze: full-panel bg + an overlay of interactive
+   controls (per-zone spectrum slider + photoperiod dial + 3 bench spots) + the
+   shared guided .room-banner. An SVG layer under the overlay holds the 3 zone
+   tint POLYGONS that glow their spectrum color on Run Cycle. The slider/needle-
+   dial/zone-tint/bloom pieces are GENERIC (reused by the Mixing Console next).
+   ============================================================================ */
+.light-screen { position: absolute; inset: 0; background: #000; font-family: var(--pixel-font); overflow: hidden; }
+.light-bg { position: absolute; inset: 0; width: 1280px; height: 580px; user-select: none; pointer-events: none; }
+
+/* Zone tint polygons — irregular columns; fill driven by --zone-rgb (set per
+   zone from its spectrum). Faint at rest so the player sees their set spectrum;
+   pulses bright while a Run Cycle is lighting. */
+.light-zones { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.light-zone {
+  fill: rgba(var(--zone-rgb, 232,232,235), 0.06);
+  stroke: none;                 /* no zone outline — just the tint fill */
+  transition: fill 240ms ease;
+}
+@keyframes light-zone-glow {
+  0%,100% { fill: rgba(var(--zone-rgb, 232,232,235), 0.10); }
+  50%     { fill: rgba(var(--zone-rgb, 232,232,235), 0.40); }
+}
+.light-zone.glow { animation: light-zone-glow 900ms ease-in-out infinite; }
+
+/* Overlay — must not eat clicks; interactive children opt back in. */
+.light-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+
+/* Spectrum-rail decoration strip (behind the handle, inside the baked control
+   box). Style/visibility driven by LIGHT_TUNE.railStyle in renderLightLab. */
+.light-srail {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;                 /* below the handle (z6) */
+  border-radius: 3px;
+  opacity: 0.85;
+}
+
+/* Spectrum slider handle (slider.png) — rides the baked rail; left/top = CENTER. */
+.light-slider {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: grab;
+  background: center/contain no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
+  z-index: 6;
+}
+.light-slider:active { cursor: grabbing; }
+@keyframes light-ctrl-pulse { 0%,100% { filter: drop-shadow(0 0 2px rgba(255,204,0,0.4)); } 50% { filter: drop-shadow(0 0 9px rgba(255,204,0,0.95)); } }
+.light-slider.pulse { animation: light-ctrl-pulse 1.1s ease-in-out infinite; }
+
+/* Photoperiod dial (dial_face.png face + needle.png pointer) — left/top = CENTER. */
+.light-dial {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: auto;
+  cursor: grab;
+  background: center/100% 100% no-repeat;
+  image-rendering: pixelated;
+}
+.light-dial:active { cursor: grabbing; }
+.light-dial .needle {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: var(--needle-w, 14px); height: var(--needle-h, 26px);
+  background: center/contain no-repeat;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.8));
+}
+.light-dial.pulse { animation: light-ctrl-pulse 1.1s ease-in-out infinite; }
+
+/* Bench spots — plant drop targets (same affordance as pipe ports). */
+.light-spot {
+  position: absolute;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);   /* left/top = CENTER */
+  pointer-events: auto;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  transition: border-color 120ms ease, box-shadow 160ms ease;
+}
+.light-spot:hover { border-color: rgba(255,255,255,0.28); }
+.light-spot.active { border-style: solid; border-color: var(--accent-go); box-shadow: 0 0 12px 3px rgba(0,255,136,0.5); }
+@keyframes light-spot-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); } 50% { box-shadow: 0 0 12px 3px rgba(0,255,136,0.55); } }
+.light-spot.pulse { border-style: solid; border-color: rgba(0,255,136,0.6); animation: light-spot-pulse 1.1s ease-in-out infinite; }
+/* Bottom-center anchored: left/top set inline = the bottom-center point, so a
+   bigger sprite grows UP out of the bench rather than in all directions. */
+.light-spot .spot-plant {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  background-repeat: no-repeat; background-position: center;
+  image-rendering: pixelated;
+}
+@keyframes light-grow-pop {
+  0% { transform: translate(-50%, -100%) scale(1); }
+  45% { transform: translate(-50%, -100%) scale(1.18); }
+  100% { transform: translate(-50%, -100%) scale(1); }
+}
+.light-spot .spot-plant.grow-pop { animation: light-grow-pop 360ms ease; }
+.light-spot .spot-clear {
+  position: absolute; top: -10px; right: -10px;
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(20,8,8,0.92); color: var(--accent-stop);
+  border: 1px solid var(--accent-stop); border-radius: 50%;
+  font: 16px/1 sans-serif; cursor: pointer; pointer-events: auto; z-index: 4;
+}
+.light-spot .spot-clear:hover { background: var(--accent-stop); color: #fff; }
+/* Resolution flash by outcome — reuse the substrate flash keyframes. */
+.light-spot.flash-ok   { animation: sub-flash-correct   620ms ease-in-out; }
+.light-spot.flash-near { animation: sub-flash-tolerated 620ms ease-in-out; }
+.light-spot.flash-far  { animation: sub-flash-stress    620ms ease-in-out; }
+
+/* Bloom burst (4-frame flower) over a spot when a triggered plant matches its
+   photoperiod. Generic — reusable by Pollination / Harvest. */
+.light-bloom {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  background: center/contain no-repeat;
+  image-rendering: pixelated;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* Tray decoration: a plant currently in a zone (dimmed), and one already lit
+   this visit (dimmed + "LIT" tag + locked from re-placement). */
+.slot.light-inzone .plant-clip { opacity: 0.5; }
+.slot.light-done .plant-clip { opacity: 0.4; filter: grayscale(0.5); }
+.slot.light-done::after {
+  content: 'LIT';
+  position: absolute;
+  left: calc(50% + var(--light-done-dx, 7px));
+  bottom: var(--light-done-bottom, 13px);
+  transform: translateX(-50%);
+  font-family: var(--pixel-font);
+  font-size: var(--light-done-fs, 11.5px);
+  letter-spacing: 0.5px;
+  color: var(--accent-warn);
+  background: rgba(0,0,0,0.7);
+  padding: 0 3px; border-radius: 2px;
+  pointer-events: none; z-index: 3;
+}
+
+/* ============================================================================
+   Demo 08 — Mixing Console (Bible §6D). Mirrors the Light Lab structure: a bg
+   image, an SVG tray-tint layer + an SVG pipe-flow layer under a click-through
+   overlay (dials, plant spots, warped terminal), and the shared .room-banner.
+   The dial FACES are baked into the bg — we draw only the needle. Reuses the
+   generic .needle / sub-flash / light-grow-pop / .dial-readout pieces.
+   ============================================================================ */
+.mix-screen { position: absolute; inset: 0; background: #000; font-family: var(--pixel-font); overflow: hidden; }
+.mix-bg { position: absolute; inset: 0; width: 1280px; height: 580px; user-select: none; pointer-events: none; }
+
+/* Zone tray tint polygons (the isometric pans) — fill driven by --zone-rgb (the
+   weighted mix color); faint at rest, pulses while Feeding. */
+.mix-trays { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.mix-tray {
+  fill: rgba(var(--zone-rgb, 120,120,130), 0.07);
+  stroke: rgba(var(--zone-rgb, 120,120,130), 0.0);
+  stroke-width: 2;
+  pointer-events: auto; cursor: pointer;
+  transition: fill 240ms ease, stroke 160ms ease;
+}
+.mix-tray:hover { fill: rgba(var(--zone-rgb, 120,120,130), 0.16); }
+.mix-tray.active { fill: rgba(0,255,136,0.18); stroke: var(--accent-go); }
+@keyframes mix-tray-glow {
+  0%,100% { fill: rgba(var(--zone-rgb, 120,120,130), 0.12); }
+  50%     { fill: rgba(var(--zone-rgb, 120,120,130), 0.45); }
+}
+.mix-tray.glow { animation: mix-tray-glow 800ms ease-in-out infinite; }
+@keyframes mix-tray-pulse {
+  0%,100% { fill: rgba(0,255,136,0.06); }
+  50%     { fill: rgba(0,255,136,0.22); }
+}
+.mix-tray.pulse { stroke: rgba(0,255,136,0.6); animation: mix-tray-pulse 1.1s ease-in-out infinite; }
+
+/* Pipe flow layer — colored N/P/K polylines (stroke set inline per nutrient),
+   traveling fill animated via stroke-dashoffset; sits below the overlay. */
+.mix-pipes { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.mix-flow {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  filter: drop-shadow(0 0 4px rgba(255,255,255,0.45));
+}
+
+/* Overlay — click-through; interactive children opt back in. */
+.mix-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+
+/* Rotary dial — face baked into the bg; we draw only the rotating needle. */
+.mix-dial {
+  position: absolute;
+  transform: translate(-50%, -50%);   /* left/top = CENTER */
+  border-radius: 50%;
+  pointer-events: auto;
+  cursor: grab;
+  image-rendering: pixelated;
+}
+.mix-dial:active { cursor: grabbing; }
+.mix-dial .needle {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: var(--needle-w, 10px); height: var(--needle-h, 26px);
+  background-repeat: no-repeat;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.85));
+}
+.mix-dial.pulse { animation: light-ctrl-pulse 1.1s ease-in-out infinite; }
+
+/* Plant spots — drop targets inside a zone pan; left/top = CENTER = plant base. */
+.mix-spot {
+  position: absolute;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 50%;
+}
+.mix-spot .spot-plant {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -100%);    /* bottom-center anchored → grows UP from the base */
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  background-repeat: no-repeat; background-position: center;
+  image-rendering: pixelated;
+}
+.mix-spot .spot-plant.grow-pop { animation: light-grow-pop 360ms ease; }
+@keyframes mix-spot-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); } 50% { box-shadow: 0 0 12px 3px rgba(0,255,136,0.5); } }
+.mix-spot.pulse { animation: mix-spot-pulse 1.1s ease-in-out infinite; }
+/* Resolution flash by outcome — reuse the substrate flash keyframes. */
+.mix-spot.flash-ok   { animation: sub-flash-correct   620ms ease-in-out; }
+.mix-spot.flash-near { animation: sub-flash-tolerated 620ms ease-in-out; }
+.mix-spot.flash-far  { animation: sub-flash-stress    620ms ease-in-out; }
+
+/* Warped delivered-mix readout on the angled wall terminal (cssQuadWarp). Base
+   color matches the baked terminal on the opposite wall. */
+.mix-term {
+  position: absolute; left: 0; top: 0; transform-origin: 0 0;
+  pointer-events: none; z-index: 4;
+  color: #34cf11; font-family: var(--pixel-font);
+  text-shadow: 0 0 4px rgba(52,207,17,0.6);
+  line-height: 1.25; padding: 3px 5px; box-sizing: border-box;
+  overflow: hidden; white-space: nowrap;   /* keep each reading on ONE line */
+  font-size: var(--mix-term-npk-fs, 7px);  /* base = NPK readings (feedLog lines use this too) */
+}
+/* A tray block = its # label + the NPK line; sizes/gap are Devtools-tunable. */
+.mix-term .mix-grp { margin-bottom: var(--mix-term-gap, 12px); }
+.mix-term .mix-grp:last-child { margin-bottom: 0; }
+.mix-term .mix-tlabel { font-size: var(--mix-term-label-fs, 12px); line-height: 1.2; }
+.mix-term .mix-tnpk   { font-size: var(--mix-term-npk-fs, 7px);    line-height: 1.2; }
+
+/* Tray decoration: a plant currently in a zone (dimmed) / already fed (FED tag). */
+.slot.mix-inzone .plant-clip { opacity: 0.5; }
+.slot.mix-done .plant-clip { opacity: 0.4; filter: grayscale(0.5); }
+.slot.mix-done::after {
+  content: 'FED';
+  position: absolute;
+  left: calc(50% + var(--mix-done-dx, 7px));
+  bottom: var(--mix-done-bottom, 14px);
+  transform: translateX(-50%);
+  font-family: var(--pixel-font);
+  font-size: var(--mix-done-fs, 12px);
+  letter-spacing: 0.5px;
+  color: var(--accent-warn);
+  background: rgba(0,0,0,0.7);
+  padding: 0 3px; border-radius: 2px;
+  pointer-events: none; z-index: 3;
+}
+
+/* ============================================================================
+   Demo 09 — Orientation Chamber  ·  Bible §6F
+   Layered: bg → plant overlay (UNDER the glass) → full-screen glass sheen →
+   warped status screens → rotate buttons → shared .room-banner (z:30). The tube
+   plant sprite is CENTER-anchored and ROTATED (microgravity disorientation).
+   Reuses sub-flash-correct/stress + light-grow-pop keyframes.
+   ============================================================================ */
+.orient-screen { position: absolute; inset: 0; background: #000; font-family: var(--pixel-font); overflow: hidden; }
+.orient-bg { position: absolute; inset: 0; width: 1280px; height: 580px; user-select: none; pointer-events: none; }
+
+/* Plant overlay — click-through; tubes opt back in. Sits UNDER the glass. */
+.orient-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.orient-glass { position: absolute; inset: 0; width: 1280px; height: 580px; pointer-events: none; z-index: 5; }
+
+/* Tube click target — left/top = CENTER of the glass interior. The box itself is
+   the select/flash glow shape (rounded, matches the cylinder). */
+.orient-tube {
+  position: absolute;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 14px;
+}
+.orient-tube.active { box-shadow: 0 0 12px 3px rgba(0,255,136,0.5); }
+.orient-tube .orient-plant {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);     /* CENTER-anchored → rotates about the middle */
+  transform-origin: 50% 50%;
+  pointer-events: none;
+  background-repeat: no-repeat; background-position: center;
+  image-rendering: pixelated;
+  transition: transform 220ms ease;     /* smooth 90° spin */
+}
+.orient-tube .orient-plant.grow-pop { animation: light-grow-pop 360ms ease; }
+@keyframes orient-tube-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); } 50% { box-shadow: 0 0 12px 3px rgba(0,255,136,0.5); } }
+.orient-tube.pulse, .orient-tube.pulse-resolved { animation: orient-tube-pulse 1.1s ease-in-out infinite; }
+.orient-tube.flash-ok  { animation: sub-flash-correct 620ms ease-in-out; }
+.orient-tube.flash-far { animation: sub-flash-stress  620ms ease-in-out; }
+
+/* Status screens — warped onto the angled left-wall panel (cssQuadWarp). Each
+   .orient-stat is positioned at the parent origin and mapped onto its quad. */
+.orient-status-layer { position: absolute; inset: 0; pointer-events: none; z-index: 6; }
+.orient-stat {
+  position: absolute; left: 0; top: 0; transform-origin: 0 0;
+  pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; line-height: var(--orient-stat-line, 1.05);
+  gap: var(--orient-stat-gap, 15px);
+  color: #4a5564;                          /* dim = off */
+  text-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
+.orient-stat .os-num  { font-size: var(--orient-stat-num-fs, 20px); font-weight: bold; }
+.orient-stat .os-word { font-size: var(--orient-stat-word-fs, 5px); letter-spacing: 0.5px; }
+.orient-stat.on.ok    { color: #46e08a; text-shadow: 0 0 6px rgba(70,224,138,0.7); }
+.orient-stat.on.wrong { color: #ec5a5a; text-shadow: 0 0 6px rgba(236,90,90,0.7); }
+
+/* Rotate buttons — one below each tube; the PNG frame is set inline (up/down). */
+.orient-btn-layer { position: absolute; inset: 0; pointer-events: none; z-index: 7; }
+.orient-rbtn {
+  position: absolute;
+  transform: translate(-50%, -50%);        /* left/top = CENTER */
+  background: center/contain no-repeat;
+  pointer-events: auto;
+  cursor: pointer;
+  image-rendering: pixelated;
+  transition: transform 80ms ease, filter 120ms ease;
+}
+.orient-rbtn:hover { filter: brightness(1.15); }
+.orient-rbtn.pressed { transform: translate(-50%, -50%) scale(0.92); }
+.orient-rbtn.disabled { opacity: 0.35; pointer-events: none; filter: grayscale(0.6); }
+@keyframes orient-btn-pulse { 0%,100% { filter: drop-shadow(0 0 0 rgba(0,255,136,0)); } 50% { filter: drop-shadow(0 0 6px rgba(0,255,136,0.8)); } }
+.orient-rbtn.pulse { animation: orient-btn-pulse 1.1s ease-in-out infinite; }
+
+/* Tray decoration: a plant currently in a tube (dimmed) / already confirmed (tag). */
+.slot.orient-intube .plant-clip { opacity: 0.5; }
+.slot.orient-done .plant-clip { opacity: 0.4; filter: grayscale(0.5); }
+.slot.orient-done::after {
+  content: 'SET';
+  position: absolute;
+  left: calc(50% + var(--orient-done-dx, 7px));
+  bottom: var(--orient-done-bottom, 14px);
+  transform: translateX(-50%);
+  font-family: var(--pixel-font);
+  font-size: var(--orient-done-fs, 12px);
+  letter-spacing: 0.5px;
+  color: var(--accent-warn);
+  background: rgba(0,0,0,0.7);
+  padding: 0 3px; border-radius: 2px;
+  pointer-events: none; z-index: 3;
+}
+
+/* ============================================================================
+   Demo 10 — Hydroponic Bay (Solution Tank, Bible §6E). A bg image, a canvas
+   trough-liquid layer, a clipped pressed-buttons overlay, oval pot drop-targets
+   with bottom-anchored plant sprites, DOM meter needles (CSS top-transition =
+   propagation lag), button hotzones, and the shared .room-banner. Reuses the
+   sub-flash-* / light-grow-pop / .sub-fly / .seed-pulse pieces.
+   ============================================================================ */
+.hydro-screen { position: absolute; inset: 0; width: 1280px; height: 580px; overflow: hidden; }
+.hydro-bg      { position: absolute; inset: 0; width: 1280px; height: 580px; user-select: none; pointer-events: none; image-rendering: pixelated; z-index: 0; }
+.hydro-liquid  { position: absolute; inset: 0; width: 1280px; height: 580px; pointer-events: none; z-index: 1; }
+.hydro-pressed { position: absolute; inset: 0; width: 1280px; height: 580px; pointer-events: none; image-rendering: pixelated; z-index: 2; opacity: 0; clip-path: inset(100% 100% 100% 100%); }
+.hydro-pressed.show { opacity: 1; }
+
+/* Pot drop-target — an oval tracing the hole; bottom-anchored plant grows up. */
+.hydro-pot {
+  position: absolute; box-sizing: border-box;
+  border: 2px solid transparent; border-radius: 50%;
+  pointer-events: auto; cursor: pointer; z-index: 3;
+  transition: border-color 120ms ease, box-shadow 160ms ease;
+}
+.hydro-pot:hover { border-color: rgba(255,255,255,0.28); }
+.hydro-pot.active { border-color: var(--accent-go); box-shadow: 0 0 12px 3px rgba(0,255,136,0.5); }
+@keyframes hydro-pot-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); } 50% { box-shadow: 0 0 12px 3px rgba(0,255,136,0.55); } }
+.hydro-pot.pulse { border-color: rgba(0,255,136,0.6); animation: hydro-pot-pulse 1.1s ease-in-out infinite; }
+.hydro-pot.flash-ok   { animation: sub-flash-correct   620ms ease-in-out; }
+.hydro-pot.flash-near { animation: sub-flash-tolerated 620ms ease-in-out; }
+.hydro-pot.flash-far  { animation: sub-flash-stress    620ms ease-in-out; }
+
+/* Post-resolve condition ring on the pot oval — green ok / yellow survive / red
+   stressed (green = the healthy/default). Gently pulses to also flag "click to
+   return". Colors carried in --cond-c / --cond-c-dim per outcome. */
+@keyframes hydro-cond-pulse {
+  0%,100% { box-shadow: 0 0 4px 1px var(--cond-c-dim); }
+  50%     { box-shadow: 0 0 13px 3px var(--cond-c); }
+}
+.hydro-pot.cond-ok, .hydro-pot.cond-near, .hydro-pot.cond-far {
+  border-style: solid;
+  animation: hydro-cond-pulse 1.3s ease-in-out infinite;
+}
+.hydro-pot.cond-ok   { border-color: var(--accent-go);   --cond-c: rgba(0,255,136,0.60); --cond-c-dim: rgba(0,255,136,0.25); }
+.hydro-pot.cond-near { border-color: var(--accent-warn); --cond-c: rgba(255,204,0,0.60); --cond-c-dim: rgba(255,204,0,0.25); }
+.hydro-pot.cond-far  { border-color: var(--accent-stop); --cond-c: rgba(255,68,85,0.65); --cond-c-dim: rgba(255,68,85,0.28); }
+
+/* Plant sprite — bottom-center anchored at the pot center, grows UP out of the
+   pot. Clickable: a click on the sprite bubbles to the pot's handler (take back /
+   return), since the sprite is the big target and the pot oval is small. */
+.hydro-pot .hydro-plant {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
+  background-repeat: no-repeat; background-position: center;
+  image-rendering: pixelated;
+  pointer-events: auto; cursor: pointer;
+}
+.hydro-pot .hydro-plant.grow-pop { animation: light-grow-pop 360ms ease; }
+
+/* Meter needle — just an arrow on the right of the printed scale that drifts to
+   its reading (the lag). No moving horizontal line: the bg already has the scale
+   lines, so the arrow alone marks the level. */
+.hydro-needle {
+  position: absolute; height: 0; pointer-events: none; z-index: 4;
+  transition: top var(--hydro-lag, 1.6s) cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hydro-needle::after {
+  content: ''; position: absolute; right: -8px; top: -6px;
+  width: 0; height: 0;
+  border: 6px solid transparent; border-right: 9px solid #ffe28a;
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.9));
+}
+
+/* Button hotzone — transparent; pulses when tuning, dims when locked. */
+.hydro-btn {
+  position: absolute; box-sizing: border-box; z-index: 4;
+  pointer-events: auto; cursor: pointer; border-radius: 4px;
+  transition: box-shadow 160ms ease;
+}
+.hydro-btn:hover { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3); }
+@keyframes hydro-btn-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,0); } 50% { box-shadow: 0 0 9px 2px rgba(0,255,136,0.6); } }
+.hydro-btn.pulse { animation: hydro-btn-pulse 1.1s ease-in-out infinite; }
+.hydro-btn.disabled { pointer-events: none; }
+
+/* Meter hover zone — invisible box over the pH/EC scale; hovering shows the
+   what/why + live reading. Sits BELOW the pots (z-index 2 < .hydro-pot's 3) so its
+   highlight outline draws behind any plant that rises into the meter area; still
+   catches hover on the exposed upper scale. */
+.hydro-meter-hz {
+  position: absolute; z-index: 2;
+  pointer-events: auto; cursor: help; border-radius: 4px;
+}
+.hydro-meter-hz:hover { box-shadow: inset 0 0 0 1px rgba(255,226,138,0.4); }
+.hydro-screen.show-hz .hydro-meter-hz {
+  box-shadow: inset 0 0 0 2px rgba(255,226,138,0.95);
+  background: rgba(255,226,138,0.16);
+}
+
+/* Tray decoration — a plant in a pot (dimmed), one locked-in this visit ("FED"
+   + locked), and a non-hydroponic plant that can't enter (dimmed + ✕). */
+.slot.hydro-inpot .plant-clip { opacity: 0.5; }
+.slot.hydro-done .plant-clip { opacity: 0.4; filter: grayscale(0.5); }
+.slot.hydro-done::after {
+  content: 'SET';
+  position: absolute; left: calc(50% + 7px); bottom: 13px;
+  transform: translateX(-50%);
+  font-family: var(--pixel-font); font-size: 11.5px; letter-spacing: 0.5px;
+  color: var(--accent-warn); background: rgba(0,0,0,0.7);
+  padding: 0 3px; border-radius: 2px;
+  pointer-events: none; z-index: 3;
+}
+.slot.hydro-locked .plant-clip { opacity: 0.3; filter: grayscale(0.85); }
+
+/* Generalized tray slot-lock (grow-room stage gate — a plant that's the wrong
+   growth stage for the current room). Same dim + on-slot ✕/reason as the hydro
+   lock, but room-agnostic (injected by syncTraySlotLocks). */
+.slot.slot-locked .plant-clip { opacity: 0.3; filter: grayscale(0.85); }
+.slot-lock-mark {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center;
+  pointer-events: none; z-index: 4; text-align: center;
+}
+.slot-lock-mark .slm-x {
+  font: 25px/1 sans-serif;
+  color: var(--accent-stop);
+  text-shadow: 0 0 4px #000, 0 0 4px #000;
+}
+.slot-lock-mark .slm-why {
+  margin-top: 3px;
+  font-family: var(--pixel-font);
+  font-size: 8px;
+  line-height: 1.1;
+  color: var(--accent-stop);
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+  white-space: nowrap;
+}
+/* On-slot ✕ + reason for a plant that can't enter (non-hydroponic). Injected as a
+   child in syncHydroTrayPulse. Size/position are Devtools-tunable CSS vars. */
+.hydro-lock-mark {
+  position: absolute;
+  left: calc(50% + var(--hydro-x-dx, 9px));
+  top:  calc(50% + var(--hydro-x-dy, -1px));
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center;
+  pointer-events: none; z-index: 4; text-align: center;
+}
+.hydro-lock-mark .hlm-x {
+  font: var(--hydro-x-size, 25px)/1 sans-serif;
+  color: var(--accent-stop);
+  text-shadow: 0 0 4px #000, 0 0 4px #000;
+}
+.hydro-lock-mark .hlm-why {
+  margin-top: var(--hydro-x-label-gap, 3px);
+  font-family: var(--pixel-font);
+  font-size: var(--hydro-x-label-fs, 8px);
+  line-height: 1.1;
+  color: var(--accent-stop);
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+   Demo 11 — Radiation Dome (Bible §6G). bg image with TRANSPARENT bracket alpha
+   windows (material strips render BEHIND the bg and show through), clip-path bay
+   alcoves with bottom-anchored plant sprites, clip-path rack quads + wall-warped
+   labels, a flat Data Log terminal, square result lights, a white exposure flash,
+   and a canvas ray layer. Reuses sub-flash-* / .sub-fly / .seed-pulse / .room-banner.
+   ============================================================================ */
+.rad-screen { position: absolute; inset: 0; width: 1280px; height: 580px; overflow: hidden; }
+/* Material strip sits BEHIND the bg (z 0); bg (z 1) hides it except at the
+   transparent bracket windows. */
+.rad-strip { position: absolute; z-index: 0; image-rendering: auto; pointer-events: none; }
+.rad-bg    { position: absolute; inset: 0; width: 1280px; height: 580px; user-select: none; pointer-events: none; image-rendering: pixelated; z-index: 1; }
+.rad-rays  { position: absolute; inset: 0; width: 1280px; height: 580px; pointer-events: none; z-index: 5; }
+
+/* Bay alcove — clip-path polygon click/flash target. */
+.rad-bay {
+  position: absolute; box-sizing: border-box; z-index: 3;
+  pointer-events: auto; cursor: pointer;
+  background: transparent; transition: background 140ms ease;
+}
+.rad-bay:hover { background: rgba(255,255,255,0.07); }
+.rad-bay.active { background: rgba(0,255,136,0.14); }
+@keyframes rad-bay-pulse { 0%,100% { background: rgba(0,255,136,0.03); } 50% { background: rgba(0,255,136,0.16); } }
+.rad-bay.pulse { animation: rad-bay-pulse 1.15s ease-in-out infinite; }
+.rad-bay.flash-ok  { animation: sub-flash-correct 620ms ease-in-out; }
+.rad-bay.flash-far { animation: sub-flash-stress  620ms ease-in-out; }
+@keyframes rad-cond-pulse { 0%,100% { background: var(--rc-dim); } 50% { background: var(--rc); } }
+.rad-bay.cond-ok, .rad-bay.cond-far { animation: rad-cond-pulse 1.3s ease-in-out infinite; }
+.rad-bay.cond-ok  { --rc: rgba(0,255,136,0.20);  --rc-dim: rgba(0,255,136,0.06); }
+.rad-bay.cond-far { --rc: rgba(255,68,85,0.22);  --rc-dim: rgba(255,68,85,0.07); }
+
+/* Plant sprite — bottom-center anchored at the bay seat (sibling of .rad-bay so
+   it isn't clipped by the alcove; can rise above the opening). */
+.rad-plant {
+  position: absolute; z-index: 3;
+  transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
+  background-repeat: no-repeat; background-position: center;
+  image-rendering: pixelated; pointer-events: auto; cursor: pointer;
+}
+
+/* Bracket click target over the transparent window. */
+.rad-bracket {
+  position: absolute; box-sizing: border-box; z-index: 4;
+  pointer-events: auto; cursor: pointer; border-radius: 3px;
+  transition: box-shadow 160ms ease;
+}
+.rad-bracket:hover { box-shadow: inset 0 0 0 2px rgba(255,255,255,0.28); }
+@keyframes rad-brk-pulse { 0%,100% { box-shadow: inset 0 0 0 1px rgba(0,255,136,0.35), 0 0 0 0 rgba(0,255,136,0); } 50% { box-shadow: inset 0 0 0 2px rgba(0,255,136,0.9), 0 0 10px 2px rgba(0,255,136,0.5); } }
+/* The bay currently awaiting a shield: steady ring + pulse (the drop location). */
+.rad-bracket.target { box-shadow: inset 0 0 0 2px rgba(0,255,136,0.7); border-radius: 3px; }
+.rad-bracket.pulse { animation: rad-brk-pulse 1.05s ease-in-out infinite; }
+
+/* Rack material source — clip-path quad over the door panel. */
+.rad-rack {
+  position: absolute; box-sizing: border-box; z-index: 4;
+  pointer-events: auto; cursor: pointer;
+  background: transparent; transition: background 140ms ease;
+}
+.rad-rack:hover { background: rgba(255,255,255,0.10); }
+.rad-rack.active { background: rgba(0,255,136,0.20); box-shadow: inset 0 0 0 2px rgba(0,255,136,0.8); }
+@keyframes rad-rack-pulse { 0%,100% { background: rgba(0,255,136,0.04); } 50% { background: rgba(0,255,136,0.18); } }
+.rad-rack.pulse { animation: rad-rack-pulse 1.15s ease-in-out infinite; }
+/* Warped label riding the wall above each panel. */
+.rad-rack-label {
+  position: absolute; left: 0; top: 0; transform-origin: 0 0; z-index: 4;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--pixel-font); font-weight: bold; font-size: 13px;
+  color: #cfe8ff; text-shadow: 0 0 3px #000, 0 0 2px #000;
+  pointer-events: none; overflow: hidden; white-space: nowrap;
+}
+.rad-rack-label.active { color: var(--accent-go); }
+
+/* Square bay result light — dim by default (bg has a baked red square); lights
+   green when shielded, bright red when damaged. */
+.rad-light {
+  position: absolute; box-sizing: border-box; z-index: 4;
+  border-radius: 2px; pointer-events: none;
+  background: transparent; transition: background 160ms ease, box-shadow 160ms ease;
+}
+.rad-light.lit-ok  { background: rgba(0,255,136,0.85); box-shadow: 0 0 9px 2px rgba(0,255,136,0.8); }
+.rad-light.lit-bad { background: rgba(255,60,72,0.9);  box-shadow: 0 0 9px 2px rgba(255,68,85,0.85); }
+
+/* Flat Data Log terminal — green phosphor text on the (opaque) screen. Child
+   sizes are em-relative to --rad-term-base so one Devtools slider scales all
+   terminal text. */
+.rad-term {
+  position: absolute; z-index: 4; box-sizing: border-box;
+  padding: 6px 8px; overflow: hidden;
+  font-family: var(--pixel-font); font-size: var(--rad-term-base, 12px); color: #6df07a;
+  text-shadow: 0 0 4px rgba(80,255,120,0.5);
+  pointer-events: none; line-height: 1.35;
+}
+.rad-term .rt-head { font-size: 0.8em; color: #8affa0; letter-spacing: 0.5px; margin-bottom: 3px; }
+.rad-term .rt-evt  { font-size: 1.2em; font-weight: bold; color: #b6ffc4; margin-bottom: 2px; }
+.rad-term .rt-line { font-size: 0.9em; }
+.rad-term .rt-dim  { font-size: 0.8em; color: #5bbf68; }
+/* Adjustable gap between the Dose line and the instruction block below it. */
+.rad-term .rt-instr { margin-top: var(--rad-term-gap, 32px); }
+.rad-term .rt-sep  { height: 1px; background: rgba(109,240,122,0.3); margin: 4px 0; }
+.rad-term .rt-bay  { font-size: 0.85em; margin: 2px 0; white-space: nowrap; }
+.rad-term .rt-mat  { color: #5bbf68; }
+.rad-term .rt-ok   { color: #7dff8f; font-weight: bold; }
+.rad-term .rt-bad  { color: #ff6a6a; font-weight: bold; text-shadow: 0 0 4px rgba(255,80,80,0.5); }
+
+/* Full-screen exposure flash. */
+.rad-flash {
+  position: absolute; inset: 0; width: 1280px; height: 580px; z-index: 6;
+  background: #fff; opacity: 0; pointer-events: none;
+}
+@keyframes rad-flash-anim { 0% { opacity: 0; } 12% { opacity: 0.92; } 40% { opacity: 0.35; } 100% { opacity: 0; } }
+.rad-flash.go { animation: rad-flash-anim 620ms ease-out; }
+
+/* Tray decoration — plant seated in a bay (dimmed), one exposed this visit. */
+.slot.rad-inbay .plant-clip { opacity: 0.5; }
+.slot.rad-done .plant-clip { opacity: 0.4; filter: grayscale(0.5); }
+.slot.rad-done::after {
+  content: 'EXPOSED';
+  position: absolute; left: calc(50% + 7px); bottom: 13px;
+  transform: translateX(-50%);
+  font-family: var(--pixel-font); font-size: 9px; letter-spacing: 0.3px;
+  color: var(--accent-warn); background: rgba(0,0,0,0.72);
+  padding: 0 3px; border-radius: 2px;
+  pointer-events: none; z-index: 3; white-space: nowrap;
+}
+
+/* ============================================================================
+   Demo 12 — Pollination Dome (Bible §6H). THE only real-time room. Bench
+   plants (bottom-anchored) + a single canvas for countdown rings / halos /
+   fan range, clip-path tool-rack quads, a flying Bee-Bot img (2-frame wings),
+   a wall-mounted Air Circulator img (2-frame blades; scaleX flip faces the
+   bench center), and the brush as a custom cursor. Reuses .room-banner /
+   .sub-fly / .light-bloom / seed-pulse.
+   ============================================================================ */
+.poll-screen { position: absolute; inset: 0; width: 1280px; height: 580px; overflow: hidden; }
+.poll-bg     { position: absolute; inset: 0; width: 1280px; height: 580px; user-select: none; pointer-events: none; image-rendering: pixelated; z-index: 1; }
+/* All per-frame drawing (rings, halos, fan range, zone preview, cooldown arcs). */
+.poll-canvas { position: absolute; inset: 0; width: 1280px; height: 580px; pointer-events: none; z-index: 5; }
+
+/* Pollen-Brush selection mode: the cursor IS the brush. */
+.poll-screen.tool-brush { cursor: url('../sprites/rooms/pollination/pollen_brush.png') 3 4, pointer; }
+
+/* Bench plant — bottom-center anchored at its POLL_BENCH seat. */
+.poll-plant {
+  position: absolute; z-index: 3;
+  transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
+  background-repeat: no-repeat; background-position: center;
+  image-rendering: pixelated; pointer-events: auto; cursor: pointer;
+}
+/* Missed pollination — the plant visibly wilts for the rest of the session. */
+.poll-plant.wilt { filter: saturate(0.25) brightness(0.75) sepia(0.25) drop-shadow(0 3px 3px rgba(0,0,0,0.6)) !important; }
+@keyframes poll-shake { 0%,100% { margin-left: 0; } 20% { margin-left: -5px; } 40% { margin-left: 5px; } 60% { margin-left: -4px; } 80% { margin-left: 4px; } }
+.poll-plant.shake { animation: poll-shake 360ms ease; }
+
+/* Flower / countdown-ring click target (circle over the ring anchor). */
+.poll-flower {
+  position: absolute; z-index: 4; border-radius: 50%;
+  pointer-events: auto; cursor: pointer;
+}
+.poll-flower:hover { background: rgba(255,255,255,0.08); }
+
+/* Wilt tint for the reversed closing bloom (playBloom cssClass). */
+.light-bloom.bloom-wilt { filter: saturate(0.15) brightness(0.7) sepia(0.4); }
+
+/* Tool rack quad — clip-path click target on the left wall. */
+.poll-rack {
+  position: absolute; box-sizing: border-box; z-index: 4;
+  pointer-events: auto; cursor: pointer;
+  background: transparent; transition: background 140ms ease;
+}
+.poll-rack:hover { background: rgba(255,255,255,0.10); }
+.poll-rack.active { background: rgba(0,255,136,0.18); }
+.poll-rack-icon {
+  position: absolute; z-index: 4; pointer-events: none;
+  image-rendering: pixelated; transition: opacity 140ms ease;
+}
+
+/* Bee-Bot — center-anchored; the ticker moves it. Never a pointer target
+   (arming happens at the rack), so it can't block flower clicks. */
+.poll-beebot {
+  position: absolute; z-index: 7; pointer-events: none;
+  transform: translate(-50%, -50%);
+  image-rendering: pixelated;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,0.55));
+}
+@keyframes poll-armed-glow { 0%,100% { filter: drop-shadow(0 3px 3px rgba(0,0,0,0.55)); } 50% { filter: drop-shadow(0 0 7px rgba(90,169,255,0.9)); } }
+.poll-beebot.armed { animation: poll-armed-glow 1.1s ease-in-out infinite; }
+
+/* Air Circulator — center-anchored on the wall band; ghost while placing.
+   transform (translate + facing flip) is set inline. Never a pointer target:
+   one gust per unit — once mounted it's committed, and spent fans are wall
+   props that must not block placing the next one near them. */
+.poll-fan {
+  position: absolute; z-index: 4; pointer-events: none;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,0.55));
+}
+.poll-fan.ghost { opacity: 0.55; }
+/* Spent = locked wall prop, but the blades keep idling (ambience) — only a
+   light dim so the motion still reads as alive. */
+.poll-fan.spent { filter: brightness(0.85) saturate(0.9) drop-shadow(0 3px 3px rgba(0,0,0,0.55)); }
+
+/* Tray decoration — plant is out on the bench. */
+.slot.poll-onbench .plant-clip { opacity: 0.5; }
+.slot.poll-onbench::after {
+  content: 'ON BENCH';
+  position: absolute; left: calc(50% + 7px); bottom: 13px;
+  transform: translateX(-50%);
+  font-family: var(--pixel-font); font-size: 9px; letter-spacing: 0.3px;
+  color: var(--accent-warn); background: rgba(0,0,0,0.72);
+  padding: 0 3px; border-radius: 2px;
+  pointer-events: none; z-index: 3; white-space: nowrap;
+}
+
+
+/* ============================================================================
+   Demo 13 — Harvest Bay (Bible §6J). CENTER ROOM in mode 'harvest' — a
+   RESULTS room, not a puzzle. Produce arcs chute→bin on a ticker; the food
+   meter (baked into the bg, dark interior) fills via canvas polygon; the
+   harvest report feeds the flat right-wall screen. Coords measured in 13a.
+   ============================================================================ */
+.harv-screen { position: absolute; inset: 0; width: 1280px; height: 580px; overflow: hidden; }
+.harv-bg     { position: absolute; inset: 0; width: 1280px; height: 580px; z-index: 1; pointer-events: none; }
+.harv-canvas { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+
+/* Falling / piled produce. Bottom-anchored via JS (left/top set per frame).
+   Piled sprites keep this class — the pile is just retired flyers. */
+.harv-produce {
+  position: absolute; z-index: 4; pointer-events: none;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 3px 3px rgba(0,0,0,0.55));
+}
+
+/* Zero-yield beat — the missed-pollination icon pops at the chute lip and
+   sinks away: the "no fruit came down the chute" marker. */
+.harv-missmark {
+  position: absolute; z-index: 5; pointer-events: none;
+  image-rendering: pixelated;
+  animation: harv-miss-sink 1.1s ease-in forwards;
+  filter: drop-shadow(0 0 6px rgba(242,131,107,0.7));
+}
+@keyframes harv-miss-sink {
+  0%   { opacity: 0; transform: translate(-50%, -8px) scale(0.7); }
+  25%  { opacity: 1; transform: translate(-50%, 0)    scale(1); }
+  70%  { opacity: 1; transform: translate(-50%, 10px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, 26px) scale(0.9); }
+}
+
+/* Right-wall report screen (flat, front-facing — plain positioned div).
+   Flex column bottom-justified = a terminal feed: newest lines stay visible
+   inside the fixed screen rect while older ones scroll off the top. */
+.harv-report {
+  position: absolute; z-index: 3; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  font-family: var(--pixel-font); font-size: 10px; line-height: 1.7;
+  color: #78e696; text-shadow: 0 0 4px rgba(120, 230, 150, 0.5);
+  padding: 8px 10px; box-sizing: border-box;
+}
+.harv-report .harv-title { color: #43d6c0; font-size: 11px; margin-bottom: 4px; }
+.harv-report .harv-dim   { color: #7a8a7a; }
+.harv-report .harv-total { margin-top: 2px; }
+.harv-report .harv-win   { color: #a5f0b8; text-shadow: 0 0 7px rgba(120, 230, 150, 0.9); }
+/* Negative outcomes: their own indented sub-line, a step smaller + salmon-red
+   (user-tuned in 13a — bad news reads as bad news). */
+.harv-report .harv-neg {
+  display: block; padding-left: 14px; margin-top: -3px;
+  color: #f2836b; font-size: 8px; line-height: 1.5;
+  text-shadow: 0 0 4px rgba(242, 131, 107, 0.45);
+}
+
+/* (End-of-run summary moved OFF the wall screen — see .harv-summary-modal
+   below. The wall screen keeps only the live per-visit harvest feed.) */
+
+/* Invisible hover hotspots over baked-in gauge/bin art (tooltips). */
+.harv-hotspot { position: absolute; z-index: 6; }
+
+/* Tray decoration — harvested stub slots read as "consumed, fed the colony". */
+.slot.harvested .plant-clip { opacity: 0.85; }
+
+/* Per-plant harvest beat on the tray — the slot mirrors its chute delivery.
+   .harv-active pulses while that plant's produce is coming down; the stub
+   pops in when the batch settles; zero-yield slots release the missed-
+   pollination icon (rising + fading, mirror of the chute-side sink). */
+.slot.harv-active {
+  box-shadow: inset 0 0 0 2px rgba(120, 230, 150, 0.9), 0 0 10px rgba(120, 230, 150, 0.55);
+  animation: harv-slot-pulse 0.8s ease-in-out infinite;
+}
+@keyframes harv-slot-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgba(120, 230, 150, 0.9), 0 0 10px rgba(120, 230, 150, 0.55); }
+  50%      { box-shadow: inset 0 0 0 2px rgba(120, 230, 150, 0.5), 0 0 4px  rgba(120, 230, 150, 0.25); }
+}
+.slot.harv-active::after {
+  content: 'HARVESTING';
+  position: absolute; left: calc(50% + 7px); bottom: 13px;
+  transform: translateX(-50%);
+  font-family: var(--pixel-font); font-size: 9px; letter-spacing: 0.3px;
+  color: #78e696; background: rgba(0, 0, 0, 0.72);
+  padding: 0 3px; border-radius: 2px;
+  pointer-events: none; z-index: 3; white-space: nowrap;
+}
+.slot.harv-stubpop .plant-clip { animation: harv-stub-pop 0.5s ease-out; }
+@keyframes harv-stub-pop {
+  0%   { transform: scale(0.4); opacity: 0.3; }
+  60%  { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.slot .harv-slot-miss {
+  position: absolute; left: 50%; bottom: 30%;
+  height: 22px; z-index: 4; pointer-events: none;
+  image-rendering: pixelated;
+  animation: harv-slot-miss-rise 1.1s ease-out forwards;
+  filter: drop-shadow(0 0 5px rgba(242, 131, 107, 0.7));
+}
+@keyframes harv-slot-miss-rise {
+  0%   { opacity: 0; transform: translate(-50%, 6px) scale(0.7); }
+  25%  { opacity: 1; transform: translate(-50%, -4px) scale(1); }
+  70%  { opacity: 1; transform: translate(-50%, -18px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -30px) scale(0.9); }
+}
+/* Harvested slots drop their badges — the harvest report tells that story. */
+.slot.harvested .badge-stack { display: none; }
+
+/* ============================================================================
+   Run Summary — the end-of-run debrief. FULL-SCREEN tabbed modal over the
+   game panel (COLONY / PLANTS / SCIENCE); ends the game (New Run restarts).
+   z 900 — the autopsy modal (z 1000) opens ABOVE it from the actions row.
+   ============================================================================ */
+.harv-summary-modal {
+  position: absolute; inset: 0; z-index: 900;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--pixel-font);
+}
+.hs-panel {
+  width: 1040px; height: 524px; position: relative;
+  display: flex; flex-direction: column;
+  color: #78e696; background: #101d16;
+  /* One knob scales ALL modal text: children are em-relative to --hs-base
+     (same pattern as the radiation terminal's --rad-term-base). */
+  font-size: var(--hs-base, 11px);
+  border: 3px solid #3a5c48; border-radius: 6px;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.85), inset 0 0 70px rgba(20, 60, 40, 0.35);
+}
+.hs-tabs { display: flex; gap: 6px; padding: 12px 14px 0; }
+.hs-tab {
+  font-family: var(--pixel-font); font-size: 1em; letter-spacing: 0.5px;
+  color: #7a8a7a; background: #0b1410; cursor: pointer;
+  border: 2px solid #2c4636; border-bottom: none;
+  border-radius: 4px 4px 0 0; padding: 7px 14px;
+}
+.hs-tab:hover { color: #a5f0b8; }
+.hs-tab.active { color: #a5f0b8; background: #16281e; border-color: #3a5c48; }
+.hs-body {
+  flex: 1; overflow-y: auto;
+  margin: 0 14px; padding: 14px 10px;
+  border-top: 2px solid #3a5c48;
+  line-height: 1.7; font-size: 1em;
+}
+.hs-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px 12px; }
+.hs-btn {
+  font-family: var(--pixel-font); font-size: 0.9em; cursor: pointer;
+  color: #78e696; background: rgba(120, 230, 150, 0.08);
+  border: 2px solid #3a5c48; border-radius: 3px; padding: 6px 12px;
+}
+.hs-btn:hover { background: rgba(120, 230, 150, 0.22); color: #d9ffe4; }
+.hs-btn.primary { border-color: #78e696; background: rgba(120, 230, 150, 0.18); }
+
+/* — COLONY tab — */
+/* Two columns: the readout (still center-aligned within itself) + the rank
+   card. Card art is 128×160 (a 64×80 art grid ×2) shown at 192×240 = 3× the
+   art grid — integer-crisp under image-rendering: pixelated. */
+.hs-colony-cols { display: flex; align-items: stretch; gap: 6px; height: 100%; }
+.hs-colony-main { flex: 1; min-width: 0; }
+.hs-colony-side { width: 230px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.hs-rank-art { width: 192px; height: 240px; image-rendering: pixelated; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.55)); }
+.hs-verdict { font-size: 1.72em; text-align: center; margin: 8px 0 2px; text-shadow: 0 0 8px rgba(120, 230, 150, 0.6); }
+.hs-verdict.lost { color: #f2836b; text-shadow: 0 0 8px rgba(242, 131, 107, 0.5); }
+/* Rank TITLE lives only on the card art (baked banner) — the readout keeps
+   just the flavor sub-line under the verdict. */
+.hs-rank-sub { text-align: center; font-size: 0.82em; color: #7a8a7a; margin: 2px 0 10px; }
+.hs-score { text-align: center; font-size: 1.27em; margin-bottom: 12px; }
+.hs-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  max-width: 720px; margin: 0 auto 12px;
+}
+.hs-stat {
+  border: 2px solid #2c4636; border-radius: 4px; background: #0b1410;
+  padding: 8px 10px; text-align: center;
+}
+.hs-stat .hs-stat-label { font-size: 0.73em; color: #7a8a7a; letter-spacing: 0.5px; }
+.hs-stat .hs-stat-value { font-size: 1.27em; margin-top: 2px; line-height: 1.5; }
+.hs-stat .hs-stat-value + .hs-stat-value { margin-top: 0; }
+.hs-stat .hs-stat-value.bad,
+.hs-stat .hs-stat-value .bad { color: #f2836b; }
+.hs-fact {
+  max-width: 720px; margin: 0 auto; padding: 8px 10px;
+  border-left: 3px solid #43d6c0; background: rgba(67, 214, 192, 0.07);
+  color: #9fd8cc; font-size: 0.9em;
+}
+.hs-fact b { color: #43d6c0; }
+
+/* — PLANTS tab — */
+.hs-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.hs-card {
+  border: 2px solid #2c4636; border-radius: 4px; background: #0b1410;
+  padding: 8px; text-align: center;
+}
+.hs-card .hs-card-sprite { margin: 0 auto 4px; image-rendering: pixelated; }
+.hs-card .hs-card-name { font-size: 0.9em; color: #a5f0b8; }
+.hs-card .hs-card-fate { font-size: 0.82em; margin-top: 2px; }
+.hs-card .hs-card-fate.dead { color: #f2836b; }
+.hs-card .hs-card-fate.growing { color: var(--accent-warn, #ffb84a); }
+.hs-card .hs-math { font-size: 0.73em; color: #7a8a7a; margin-top: 3px; line-height: 1.6; }
+.hs-card .hs-math .cut { color: #f2836b; }
+.hs-liebig {
+  margin-top: 12px; padding: 8px 10px;
+  border-left: 3px solid var(--accent-warn, #ffb84a); background: rgba(255, 184, 74, 0.06);
+  color: #d8c49a; font-size: 0.9em;
+}
+.hs-liebig b { color: var(--accent-warn, #ffb84a); }
+
+/* — SCIENCE tab — */
+.hs-chart-title { text-align: center; font-size: 1em; color: #a5f0b8; letter-spacing: 0.5px; margin: 2px 0 1px; }
+.hs-chart-sub   { text-align: center; font-size: 0.73em; color: #7a8a7a; margin-bottom: 8px; }
+.hs-bars { max-width: 640px; margin: 4px auto 14px; }
+.hs-bar-row {
+  display: grid; grid-template-columns: 120px 1fr 30px; gap: 8px;
+  align-items: center; font-size: 0.9em; color: #9ab09a; margin: 4px 0;
+}
+.hs-bar { height: 9px; background: #f2836b; border-radius: 2px; box-shadow: 0 0 6px rgba(242, 131, 107, 0.45); }
+.hs-takes { max-width: 780px; margin: 0 auto; }
+.hs-take { display: flex; gap: 9px; align-items: flex-start; margin: 8px 0; }
+.hs-take img { height: var(--hs-take-icon, 30px); image-rendering: pixelated; flex-shrink: 0; margin-top: 2px; }
+.hs-take .hs-take-text { font-size: 0.9em; line-height: 1.65; }
+.hs-take .hs-take-text b { color: #a5f0b8; }
+.hs-flawless { text-align: center; color: #a5f0b8; font-size: 1em; margin: 14px 0; }
+
+/* ============================================================================
+   Demo 15 — Startup screen (title card + Continue / New Run / difficulty)
+   Full-stage overlay; sits above the tray (z 950, below autopsy z1000).
+   ============================================================================ */
+.startup-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 950;
+  background: radial-gradient(ellipse at 50% 35%, #101332 0%, var(--bg-void) 70%);
+  opacity: 1;
+  transition: opacity 0.6s ease;
+}
+.startup-layer.fading { opacity: 0; pointer-events: none; }
+.startup-stars { position: absolute; inset: 0; }
+.startup-stars canvas { position: absolute; inset: 0; }
+
+.startup-inner {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+}
+.startup-kicker {
+  font-size: 11px;
+  letter-spacing: 6px;
+  color: var(--text-dim);
+}
+.startup-title {
+  font-size: 64px;
+  line-height: 1.12;
+  letter-spacing: 10px;
+  color: #eafff2;
+  text-shadow: 0 0 18px rgba(0, 255, 136, 0.35), 0 4px 0 #063;
+}
+.startup-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+.startup-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  min-height: 150px;
+}
+
+.startup-btn {
+  font-family: var(--pixel-font);
+  font-size: 16px;
+  letter-spacing: 3px;
+  color: #b9f5c9;
+  background: rgba(16, 40, 26, 0.72);
+  border: 2px solid rgba(120, 230, 150, 0.55);
+  border-radius: 4px;
+  padding: 14px 34px;
+  min-width: 300px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.startup-btn:hover { background: rgba(120, 230, 150, 0.22); color: #eafff2; }
+.startup-btn.primary {
+  border-color: var(--accent-go);
+  background: rgba(0, 255, 136, 0.14);
+  color: #eafff2;
+}
+
+.startup-diff-label {
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+.startup-diff-row { display: flex; gap: 14px; }
+/* Difficulty buttons are color-coded via --diff-rgb (set inline from the
+   DIFFICULTY table): cadet green / commander amber / specialist red. */
+.startup-btn.diff {
+  min-width: 0;
+  width: 220px;
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  border-color: rgba(var(--diff-rgb), 0.55);
+  background: rgba(var(--diff-rgb), 0.08);
+}
+.startup-btn.diff:hover { background: rgba(var(--diff-rgb), 0.22); }
+.startup-btn.diff.suggested {
+  border-color: rgb(var(--diff-rgb));
+  box-shadow: 0 0 12px rgba(var(--diff-rgb), 0.35);
+}
+.startup-btn-label { font-size: 15px; letter-spacing: 3px; }
+.startup-btn.diff .startup-btn-label { color: rgb(var(--diff-rgb)); }
+.startup-btn-sub   { font-size: 9px; letter-spacing: 1px; color: var(--text-dim); }
+.startup-btn.diff:hover .startup-btn-sub { color: var(--text); }
+
+/* Tooltip rows that must never wrap (one fact per line). */
+.tt-line { white-space: nowrap; }
+
+.startup-back {
+  font-family: var(--pixel-font);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+}
+.startup-back:hover { color: var(--text); }
+
+/* ============================================================================
+   Demo 15b — Tutorial coach-marks
+   z940: above tray/top bar (100) + run summary (900), below startup (950)
+   and autopsy review (1000). The scrim blocks all clicks while a tour is up.
+   ============================================================================ */
+.tut-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 940;
+}
+.tut-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tut-scrim { fill: rgba(4, 8, 14, var(--tut-scrim, 0.62)); }
+
+/* Glow = a static wide halo stroke UNDER a thin outline that pulses plain
+   `opacity`. Never animate stroke-opacity/filter on these: an animated
+   property on a drop-shadowed SVG shape makes Firefox re-rasterize the filter
+   every frame — pegged a CPU core on big highlight rects (user-hit 2026-07-18). */
+.tut-halo {
+  stroke: rgba(0, 255, 136, 0.28);
+  stroke-width: 7;
+}
+.tut-outline {
+  stroke: var(--accent-go);
+  stroke-width: 2;
+  animation: tut-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tut-pulse {
+  0%, 100% { opacity: 0.95; }
+  50%      { opacity: 0.4; }
+}
+.tut-line {
+  stroke: rgba(0, 255, 136, 0.75);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+.tut-line-dot { fill: var(--accent-go); }
+
+.tut-box {
+  position: absolute;
+  background: #101a26;
+  border: 2px solid rgba(120, 230, 150, 0.8);
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px #05070c, 0 6px 22px rgba(0, 0, 0, 0.65);
+  padding: 14px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tut-text {
+  font-size: var(--tut-font, 10.5px);
+  line-height: 1.65;
+  color: var(--text);
+}
+.tut-text b { color: var(--accent-go); }
+
+.tut-dots { display: flex; gap: 6px; justify-content: center; }
+.tut-dots span {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: rgba(138, 138, 154, 0.45);
+}
+.tut-dots span.on { background: var(--accent-go); }
+
+.tut-btns {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.tut-next, .tut-skip, .tut-skip-all, .tb-help {
+  font-family: var(--pixel-font);
+  cursor: pointer;
+}
+.tut-next {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #eafff2;
+  background: rgba(0, 255, 136, 0.16);
+  border: 1.5px solid var(--accent-go);
+  border-radius: 4px;
+  padding: 7px 14px;
+}
+.tut-next:hover { background: rgba(0, 255, 136, 0.3); }
+.tut-skip {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  padding: 7px 4px;
+}
+.tut-skip:hover { color: var(--text); }
+.tut-skip-all {
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  align-self: center;
+  padding: 2px 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.tut-skip-all:hover { color: var(--accent-warn); }
+
+/* Top-bar help button (game mode only) */
+.tb-help {
+  width: 26px;
+  height: 26px;
+  margin-left: 12px;
+  font-size: 12px;
+  color: var(--accent-go);
+  background: rgba(0, 255, 136, 0.08);
+  border: 1.5px solid rgba(120, 230, 150, 0.6);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tb-help:hover { background: rgba(0, 255, 136, 0.22); }
