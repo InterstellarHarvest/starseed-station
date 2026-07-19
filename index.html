@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>STARSEED STATION</title>
+<link rel="stylesheet" href="css/shared.css">
+<style>
+  body {
+    background: var(--bg-void);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  #stage { background: var(--bg-base); }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="top-bar"></div>
+  <div id="game-panel">
+    <div id="hub-layer"></div>
+  </div>
+  <div id="tray"></div>
+</div>
+
+<script src="js/shared.js"></script>
+<script>
+/* ============================================================================
+   STARSEED STATION — the game (Demo 15: full integration).
+   Everything lives in shared.js/shared.css; this page is pure orchestration:
+   game mode on → startup screen → hub → the run plays itself through the
+   registered room builders. No Devtools sidebar here — demos keep theirs.
+   ============================================================================ */
+
+enableGameMode();   // autosave-at-hub + global run-over triggers
+
+/* ▶ New Run on the final run-summary modal = restart to the very beginning:
+   back to the title card, where the player picks a difficulty again. */
+setNewRunHandler(() => {
+  resetStageToHub();
+  mountStartupScreen({ onStart: enterStation });
+});
+
+/* After the startup screen fades: the hub is already rendered underneath.
+   On a resumed run that actually ended (saved at the final modal, reloaded
+   later), reopen the summary — the run is over; New Run is the way forward.
+   Otherwise raise the hub welcome tour (first visit per run — no-op if seen). */
+function enterStation(mode) {
+  if (mode === 'continue' && gameState.tray.some(Boolean) && harvRunOver()) {
+    openRunSummary();
+    return;
+  }
+  maybeShowTour('hub');
+}
+
+/* Boot: lock the hub down to the pre-run state so nothing flashes unlocked
+   behind the title card, render all surfaces, then raise the startup screen. */
+resetHubRooms(gameState, { clearTray: true });
+applyDifficulty(loadPrefs().difficulty || 'commander');
+refreshAllSurfaces();
+mountStartupScreen({ onStart: enterStation });
+</script>
+
+</body>
+</html>
