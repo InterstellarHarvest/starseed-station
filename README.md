@@ -1,7 +1,6 @@
 # Starseed Station
 
-A browser-based **space-agriculture edutainment game** for a middle-school science
-minicourse. You're a colony worker aboard an orbital station, raising eight crop plants
+A browser-based **space-agriculture educational science game**. You're a colony worker aboard an orbital station, raising eight crop plants
 through specialist rooms that each teach a real growing concept — then harvesting enough
 food to feed the colony.
 
@@ -57,4 +56,4 @@ species with CSS filters. Desktop / mouse, on a 1280×720 stage.
 
 ---
 
-Built for the classroom. 🛰
+Built as an educational science game. 🛰
