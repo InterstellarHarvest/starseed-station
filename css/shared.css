@@ -2819,6 +2819,26 @@ body.anchor-tuning-mode .hub-status-icon:active { cursor: grabbing; }
 .startup-stars { position: absolute; inset: 0; }
 .startup-stars canvas { position: absolute; inset: 0; }
 
+/* Title-screen station: 122×93 art at 3× (366×279), centred, top edge just
+   above the menu buttons so the bulk sits in the empty band beneath them.
+   Pointer-events off — the buttons above it stay clickable. Slow bob. */
+.startup-station {
+  position: absolute;
+  left: 50%;
+  top: 432px;
+  width: 366px;
+  height: 279px;
+  margin-left: -183px;
+  image-rendering: pixelated;
+  pointer-events: none;
+  filter: drop-shadow(0 0 22px rgba(0, 255, 136, 0.18));
+  animation: startup-station-bob 7s ease-in-out infinite;
+}
+@keyframes startup-station-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+
 .startup-inner {
   position: relative;
   height: 100%;

@@ -74,6 +74,8 @@ const ASSETS = {
   'autopsy-card':             'sprites/plants/autopsy_card.png',
   'dead-tray':                'sprites/plants/dead_tray.png',
 
+  'menu-station':             'sprites/menu_station.png',   // title-screen hero (122×93 native, shown 3×)
+
   /* --- Icons (badges, deaths, cursors, padlock, complete, bloom) --------- */
   'padlock':                  'sprites/icons/padlock.png',
   'complete':                 'sprites/icons/complete.png',
@@ -10100,6 +10102,14 @@ function mountStartupScreen(opts = {}) {
   const stars = document.createElement('div');
   stars.className = 'startup-stars';
   layer.appendChild(stars);
+
+  // The station itself — tucked under the subtitle, its domes peeking out
+  // behind the menu buttons, the bulk of it filling the empty band below.
+  const station = document.createElement('img');
+  station.className = 'startup-station';
+  station.src = assetUrl('menu-station');
+  station.alt = '';
+  layer.appendChild(station);
 
   const inner = document.createElement('div');
   inner.className = 'startup-inner';
