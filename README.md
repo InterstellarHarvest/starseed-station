@@ -1,70 +1,106 @@
-# Starseed Station
+<p align="center">
+  <img src="docs/screenshots/01-title.png" width="640" alt="Starseed Station title screen">
+</p>
 
-A browser-based **space-agriculture educational science game**. You're a colony worker aboard an orbital station, raising eight crop plants
-through specialist rooms that each teach a real growing concept — then harvesting enough
-food to feed the colony.
+<h1 align="center">STARSEED STATION</h1>
+<p align="center"><em>Grow the food. Learn the science. Feed the colony.</em></p>
 
-Inspired by *The Logical Journey of the Zoombinis*: every room is a hands-on puzzle, and
-every plant hides traits you discover by playing.
-
-## Play
-
-No build step, no dependencies. Either:
-
-- **Open `index.html`** directly in a modern browser, or
-- **Serve the folder statically** (recommended — avoids `file://` asset quirks):
-
-  ```bash
-  python3 -m http.server 8000
-  # then visit http://localhost:8000
-  ```
-
-Progress saves to `localStorage`, so you can close the tab and pick up where you left off.
-
-## The station
-
-Eight science rooms, each teaching one concept:
-
-| Room | Concept |
-|---|---|
-| Substrate Lab | Growing media — soil-like / inert / water-only |
-| Pipe Maze | Irrigation — matching water to each plant's need |
-| Light Lab | Light spectrum & photoperiod (day-length) |
-| Mixing Console | N-P-K nutrient ratios |
-| Orientation Chamber | Gravitropism in microgravity |
-| Solution Tank | Hydroponics — pH & nutrient availability |
-| Radiation Dome | Cosmic radiation & shielding |
-| Pollination Dome | Pollination in a closed habitat (the only real-time room) |
-
-Plants grow **Seed → Sprout → Vegetative → Flowering → Fruiting**, one stage per room, with
-pollination as the required final step before harvest. Some traits are printed on the seed
-packet; others — gravity response, pH preference, radiation tolerance, substrate match,
-photoperiod trigger — stay hidden until you test them. A plant that dies leaves an autopsy
-card explaining the science behind what went wrong.
-
-## Difficulty
-
-- **Cadet** — training wheels: 95 food to start, quota 130, a limited seed selection.
-- **Commander** — the standard run: 80 food, quota 110.
-- **Specialist** — deep-space posting: 60 food, quota 120, Radiation Dome online.
-
-## Tech
-
-Single-page and DOM-rendered (canvas is used only for particles, gauge needles, and liquid
-fills). One shared stylesheet and one shared script; sprites are pixel-art PNGs tinted per
-species with CSS filters. Desktop / mouse. The 1280×720 stage scales to fill the window.
-
-## Tests
-
-`tests/smoke.js` is a headless Playwright run: static checks (no duplicate function names,
-every sprite path exists), fit-to-window at three sizes, then a full scripted run through
-every growth room to the run summary.
-
-```bash
-npm i -g playwright && npx playwright install chromium   # once
-NODE_PATH="$(npm root -g)" node tests/smoke.js
-```
+<p align="center">
+  <b>Play it now:</b> download or clone this repo and open <code>index.html</code> in any modern desktop browser.<br>
+  No install, no build, no account. Your progress saves automatically.
+</p>
 
 ---
 
-Built as an educational science game. 🛰
+You are the newest agronomist aboard an orbital farming station, and the colony is hungry.
+Eight seed packets, eight science rooms, one harvest season. Every room is a hands-on puzzle
+built on a real growing concept, and every plant hides traits you can only uncover by
+experimenting. Get it right and the colony eats. Get it wrong and the autopsy card tells you
+exactly why.
+
+Starseed Station is a browser-based science game in the spirit of
+*The Logical Journey of the Zoombinis*: no lectures, no quizzes, just rooms that teach by
+letting you try things.
+
+## Pick your crew
+
+<img src="docs/screenshots/02-seed-bank.png" width="640" alt="The Seed Bank">
+
+Twenty space-adapted crops sit on the shelves of the Seed Bank, from cherry tomato and dwarf
+wheat to watercress and cantaloupe. Each packet shows what you can know up front: water
+need, light preference, appetite, how it pollinates. The rest, like how it feels about
+gravity, pH, radiation and the length of the day, stays a question mark until you test it.
+Choose eight.
+
+## Eight rooms, eight lessons
+
+<img src="docs/screenshots/03-substrate-lab.png" width="640" alt="The Substrate Lab">
+
+**Substrate Lab.** Space farms cannot haul soil from Earth. Match each seed to a growing
+medium, from perlite and coco coir to crushed regolith and nutrient gel, and find out which
+plants are fussy about their roots.
+
+<img src="docs/screenshots/04-pipe-maze.png" width="640" alt="The Pipe Maze">
+
+**Pipe Maze.** One tank of recycled water for the whole season. Dial each plant's supply,
+pressurize the lines and watch the gauges grade you. Drought and flood both hurt, and every
+drop you waste is gone for good.
+
+<img src="docs/screenshots/05-light-lab.png" width="640" alt="The Light Lab">
+
+**Light Lab.** Plants eat light, but not all colours equally. Sort your crops into three
+zones, tune each zone's spectrum and day-length, and discover which plants will only flower
+when the hours are right.
+
+**Mixing Console.** Fertiliser chemistry with three dials: nitrogen, phosphorus, potassium.
+Feed each plant to its appetite and its stage of growth. Too little starves it. Too much
+burns it.
+
+**Orientation Chamber.** In orbit there is no down. Rotate each plant until its shoot points
+the right way and learn which species can cope without gravity and which cannot.
+
+**Solution Tank.** Hydroponics without a safety net. Nudge pH and nutrient strength on two
+live channels and keep the solution inside the band where roots can actually feed.
+
+**Radiation Dome.** Deep space is hostile. Shield your bays with aluminium, polyethylene,
+regolith or plain water, run the exposure, and find out which material really stops a
+particle storm.
+
+<img src="docs/screenshots/07-pollination-dome.png" width="640" alt="The Pollination Dome">
+
+**Pollination Dome.** The station's only real-time room. No bees, no breeze, just you with a
+pollen brush, a Bee-Bot and an air circulator while every bloom's timer runs down. Match the
+tool to the flower before it closes.
+
+## Bring in the harvest
+
+<img src="docs/screenshots/08-harvest.png" width="640" alt="The Harvest Bay">
+
+Ripe crops roll down the chute and the colony's food meter climbs. Yield follows the plant's
+whole story: its health, whether it was pollinated, whether it got the light it needed. A
+plant you neglected gives back less. A plant you lost gives back nothing.
+
+<img src="docs/screenshots/09-run-summary.png" width="640" alt="The run summary">
+
+At the end of the season the debrief shows where the food came from, where things went
+wrong room by room, and the science behind each mistake. Earn your rank, from Hungry Winter
+to Master Agronomist, then start a new run and do it better.
+
+## Three postings
+
+- **Cadet** — a first posting. Generous rations and a curated seed rack.
+- **Commander** — the standard run.
+- **Specialist** — deep space. Tight rations, a higher quota, and the Radiation Dome online.
+
+## Made for the classroom
+
+<img src="docs/screenshots/06-hub.png" width="640" alt="The station hub">
+
+Every death comes with an autopsy card and a short, middle-school-level explanation of the
+plant science involved. Hover anything for a tooltip. A built-in tour walks first-time
+players through each room, and the whole game runs from a single folder with nothing to
+install, so it works on a locked-down lab machine as well as it does at home.
+
+---
+
+<p align="center">Built as an educational science game. 🛰</p>
