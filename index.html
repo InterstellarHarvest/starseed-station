@@ -5,14 +5,24 @@
 <title>STARSEED STATION</title>
 <link rel="stylesheet" href="css/shared.css">
 <style>
+  html, body { height: 100%; margin: 0; }
   body {
     background: var(--bg-void);
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;   /* the stage is scaled to fit, never scrolled */
   }
-  #stage { background: var(--bg-base); }
+  /* Fit-to-window: the 1280×720 stage scales (up or down) by --fs-scale, set
+     by fitStageToWindow() below. Everything (tooltips, overlays, drag math)
+     already reads --fs-scale, so the whole game follows the transform. */
+  #stage {
+    background: var(--bg-base);
+    flex-shrink: 0;
+    transform: scale(var(--fs-scale, 1));
+    transform-origin: center center;
+  }
 </style>
 </head>
 <body>
@@ -35,6 +45,16 @@
    ============================================================================ */
 
 enableGameMode();   // autosave-at-hub + global run-over triggers
+
+/* Fit the 1280×720 stage to the window: fill the full width on wide screens,
+   shrink on small ones. Contain-fit (min of the two ratios) so a short window
+   never clips the tray. */
+function fitStageToWindow() {
+  const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+  document.documentElement.style.setProperty('--fs-scale', s.toFixed(4));
+}
+window.addEventListener('resize', fitStageToWindow);
+fitStageToWindow();
 
 /* ▶ New Run on the final run-summary modal = restart to the very beginning:
    back to the title card, where the player picks a difficulty again. */

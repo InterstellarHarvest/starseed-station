@@ -1,33 +1,23 @@
 /* ============================================================================
    STARSEED STATION — shared.js
-   Loaded by every demo and the final index.html.
+   The whole engine: data tables, tray/tooltip/hub chrome, every room, the
+   harvest + run summary, save/load, and the tutorial layer. index.html is pure
+   orchestration on top of this file.
 
    RULE: before writing ANY new logic, ask "could this be useful in another
-   room?" If yes, it goes HERE first, then gets used.
+   room?" If yes, it goes in a shared section first, then gets used.
 
-   Contents (built up across demos):
-     - ASSETS              preloader manifest (real disk paths)
-     - SPECIES             20-species registry with traits
-     - SPECIES_FILTERS     CSS filter strings per species  (stub until Demo 14)
-     - FAMILY_SHEETS       family → sheet asset key
-     - FAMILY_ROWS         family → [speciesIds] for seed bank rendering
-     - TOOLTIPS            tooltip content per element type
-     - gameState           live state tree
-     - preloadAssets()     loads all PNGs before game starts
-     - createPlant()       plant factory          (stubbed, filled in Demo 01)
-     - showTooltip()       tooltip system         (stubbed, filled in Demo 02)
-     - renderTray()        tray render            (stubbed, filled in Demo 01)
+   NOTE: one global scope — never declare two functions with the same name
+   (the last declaration silently wins). tests/smoke.js scans for duplicates.
    ============================================================================ */
 
 
 /* ============================================================================
-   ASSET_BASE — prefix prepended to every ASSETS path at use time.
-   Demos under /demos/ set this to '../'. The eventual index.html at project
-   root leaves it as ''. Use assetUrl(key) everywhere instead of raw ASSETS[key]
-   when building <img src> or CSS url() strings.
+   ASSET_BASE — prefix prepended to every ASSETS path at use time ('' for
+   index.html at project root). Use assetUrl(key) everywhere instead of raw
+   ASSETS[key] when building <img src> or CSS url() strings.
    ============================================================================ */
-let ASSET_BASE = '';
-function setAssetBase(b) { ASSET_BASE = b; }
+const ASSET_BASE = '';
 function assetUrl(key) {
   const p = ASSETS[key];
   if (!p) { console.warn('Unknown asset key:', key); return ''; }
@@ -36,15 +26,11 @@ function assetUrl(key) {
 
 
 /* ============================================================================
-   ASSETS — preloader manifest
-   Paths verified against on-disk state 2026-06-06.
-   The Bible/Handoff manifest is out of date in places (clean hypothetical
-   layout vs. actual underscored filenames at root); this is the source of truth.
+   ASSETS — logical name → on-disk path (the source of truth for every sprite).
    ============================================================================ */
 const ASSETS = {
 
   /* --- Hub --------------------------------------------------------------- */
-  'hub-color':                'sprites/rooms/hub/hub.png',          // reference only — not used at runtime in Demo 03+
   'hub-dimmed':               'sprites/rooms/hub/hub_locked.png',   // base dimmed layer, always visible
   'hub-label-harvest':        'sprites/rooms/hub/label_harvest_room.png',
   // Per-room cutouts (1280×580 each, transparent except the one room). Stacked
@@ -85,19 +71,12 @@ const ASSETS = {
   'plants-root-tuber':        'sprites/plants/plant_root_tuber.png',
 
   /* --- Root-level chrome (CSS 9-slice + generic buttons) ----------------- */
-  'tray-bg':                  'sprites/plant_tray.png',
-  'tray-slot':                'sprites/plant_slot.png',
   'autopsy-card':             'sprites/plants/autopsy_card.png',
   'dead-tray':                'sprites/plants/dead_tray.png',
-  'notification':             'sprites/notification.png',
-  'button-up':                'sprites/button_up.png',      // generic action button, NORMAL state
-  'button-down':              'sprites/button_down.png',    // generic action button, PRESSED state
 
   /* --- Icons (badges, deaths, cursors, padlock, complete, bloom) --------- */
   'padlock':                  'sprites/icons/padlock.png',
   'complete':                 'sprites/icons/complete.png',
-  'cursor-pointer':           'sprites/icons/cursor_pointer.png',
-  'cursor-grab':              'sprites/icons/cursor_grab.png',
 
   // Tray-slot badges (10×10 px, transparent)
   'badge-substrate-assigned':   'sprites/icons/badge_substrate_assigned.png',
@@ -144,8 +123,6 @@ const ASSETS = {
   'substrate-agar':           'sprites/rooms/substrate/agar.png',
 
   /* --- Pipe Maze --------------------------------------------------------- */
-  'valve-wheel-sheet':        'sprites/rooms/pipe_maze/spritesheet_wheel.png',
-  // valve coords measured separately — see VALVE_COORDS below.
   // Flood/drought stress badges reuse the cause-of-death icons (no separate art).
   'badge-flood':              'sprites/icons/death_overwater.png',
   'badge-drought':            'sprites/icons/death_drought.png',
@@ -154,7 +131,6 @@ const ASSETS = {
   'dial-face':                'sprites/rooms/light/dial_face.png',
   'dial-needle':              'sprites/rooms/light/needle.png',
   'slider-handle':            'sprites/rooms/light/slider.png',
-  'light-flower-bloom':       'sprites/rooms/light/flower_bloom.png',
 
   /* --- Mixing Console — needle sheet (40×32, 3 needles horizontal) ------- */
   'needle-sheet':             'sprites/rooms/mixing_console/pointers.png',
@@ -184,8 +160,6 @@ const ASSETS = {
   'radiation-uv':             'sprites/rooms/radiation/radiation_uv.png',
   'radiation-particle':       'sprites/rooms/radiation/radiation_particle.png',
   'radiation-gamma':          'sprites/rooms/radiation/radiation_gamma.png',
-  'exposure-clear':           'sprites/rooms/radiation/exposure_clear.png',
-  'exposure-damage':          'sprites/rooms/radiation/exposure_damage.png',
 
   /* --- Pollination Dome -------------------------------------------------- */
   'bee-drone-1':              'sprites/rooms/pollination/bee_drone1.png',
@@ -224,17 +198,6 @@ const ASSETS = {
    Measured from the spritesheets via Demo 00 (or hand-measured where noted).
    ============================================================================ */
 
-// Pipe Maze valve wheel — measured in Demo 00.
-// 1×3 grid, cell 260×260, origin (0,0).
-/* Valve-wheel sheet — 3 frames, 128×128, packed 1px apart (verified against
-   sprites/rooms/pipe_maze/spritesheet_wheel.json; the 260×260 values here before
-   were stale). Sheet is 390×130. */
-const VALVE_SHEET = { w: 390, h: 130 };
-const VALVE_COORDS = {
-  closed:  { x:   1, y: 1, w: 128, h: 128 },
-  turning: { x: 131, y: 1, w: 128, h: 128 },
-  open:    { x: 261, y: 1, w: 128, h: 128 },
-};
 
 // Mixing Console rotary needles — measured in Demo 00.
 // File is 38×32. 12-wide cells with 1px gap on each side of the center needle:
@@ -245,8 +208,7 @@ const NEEDLE_COORDS = {
   K: { x: 26, y: 0, w: 12, h: 32 },
 };
 
-// Plant family sheet cell sizes — TBD from Demo 00.
-// All sheets are 3×3 grids in this cell order:
+// All plant family sheets are 3×3 grids (85×85 cells) in this cell order:
 //   [Seed   ][Sprout ][Vegetative]
 //   [Flowering][Fruiting][Stressed]
 //   [Critical][Dead   ][Harvested]
@@ -255,8 +217,6 @@ const PLANT_STAGES = [
   'flowering', 'fruiting', 'stressed',
   'critical', 'dead', 'harvested',
 ];
-// Measured in Demo 00 — all 5 family sheets share these dimensions.
-const PLANT_CELL = { w: 85, h: 85 };
 const PLANT_SHEET_ROWS = 3;
 const PLANT_SHEET_COLS = 3;
 
@@ -432,16 +392,6 @@ function plantSpriteFilter(plant, stage) {
 
 
 /* ============================================================================
-   TOOLTIPS — content table
-   Populated as each demo adds its interactive elements.
-   Dynamic tooltips (e.g. tray slots) build content at render time instead.
-   ============================================================================ */
-const TOOLTIPS = {
-  // Filled in Demo 02.
-};
-
-
-/* ============================================================================
    gameState — live state tree
    Mirrors Bible §10. Demos mutate this; never replace the top-level reference.
    ============================================================================ */
@@ -453,8 +403,6 @@ const gameState = {
     foodSpent: 0,      // lifetime food paid for room actions (run-summary ledger)
     foodEarned: 0,     // lifetime food credited by harvests
     difficulty: 'commander',
-    scenario: null,
-    midRunReseedEnabled: false,
     seedBankSelectionComplete: false,   // set when all 8 tray slots are filled and the player exits
   },
   seedBank: {
@@ -465,7 +413,6 @@ const gameState = {
   },
   tray: [null, null, null, null, null, null, null, null],
   deadTray: [],
-  autopsyLog: [],
   moduleState: {
     // Room status field — 5-state machine:
     //   'locked'      → padlock, cutout hidden, no glow
@@ -486,13 +433,9 @@ const gameState = {
   },
   centerRoom: {
     mode: 'seedbank',
-    harvestReady: [],
   },
   ui: {
     currentScreen: 'hub',
-    notification: null,
-    tooltip: { visible: false, content: null, x: 0, y: 0 },
-    autopsyOpen: false,
     seedBankFloatingPacket: null,
     selectedSlot: null,     // index of currently-grabbed plant, or null
   },
@@ -500,31 +443,7 @@ const gameState = {
 
 
 /* ============================================================================
-   Preloader — caches every entry in ASSETS before the game starts.
-   ============================================================================ */
-const LOADED = {}; // logical-name → HTMLImageElement
-
-function preloadAssets(manifest, onDone, onProgress) {
-  const entries = Object.entries(manifest);
-  let done = 0;
-  const total = entries.length;
-  if (total === 0) { onDone && onDone(LOADED); return; }
-  entries.forEach(([key, path]) => {
-    const img = new Image();
-    img.onload = img.onerror = () => {
-      LOADED[key] = img;
-      done++;
-      onProgress && onProgress(done, total, key);
-      if (done === total) onDone && onDone(LOADED);
-    };
-    img.src = path;
-  });
-}
-
-
-/* ============================================================================
    Plant factory — creates a plant object for a tray slot
-   Built in Demo 01. Stub here so room files can call it without errors.
    ============================================================================ */
 function createPlant(speciesId, slotIndex) {
   const s = SPECIES[speciesId];
@@ -587,15 +506,6 @@ let TOOLTIP_DELAY_MS = 350;
 const TOOLTIP_GRACE_MS = 80;   // hide debounce — cancels if a new enter fires
 let TOOLTIP_GAP_PX = 8;        // gap between tooltip's bottom edge and element's top edge
 let TOOLTIP_SCALE_WITH_STAGE = true;   // true → tooltip lives inside #stage and inherits the fullscreen transform
-function setTooltipDelay(ms) { TOOLTIP_DELAY_MS = ms; }
-function setTooltipGap(px)   { TOOLTIP_GAP_PX = px; }
-function setTooltipScaleWithStage(yes) {
-  TOOLTIP_SCALE_WITH_STAGE = !!yes;
-  if (!_tooltipEl) return;
-  const stage = document.getElementById('stage');
-  const want = TOOLTIP_SCALE_WITH_STAGE && stage ? stage : document.body;
-  if (_tooltipEl.parentElement !== want) want.appendChild(_tooltipEl);
-}
 
 let _tooltipEl = null;
 let _showTimer = null;
@@ -927,7 +837,8 @@ let _slotClickHandler = null;
 function setSlotClickHandler(fn) { _slotClickHandler = fn; }
 
 /* Optional one-line hint appended to a planted slot's tooltip (e.g. the Seed
-   Bank's "Click to put back"). Rooms set it on enter, clear it on exit. */
+   Bank's "Click to put back"). A string, or a (plant) => string|null function.
+   Rooms set it on enter, clear it on exit. */
 let _trayClickHint = null;
 function setTrayClickHint(text) { _trayClickHint = text; }
 
@@ -944,10 +855,7 @@ function toggleSlotSelection(idx) {
   }
   renderTray(gameState);
 }
-function selectSlot(idx)        { gameState.ui.selectedSlot = idx;  renderTray(gameState); }
 function clearSlotSelection()   { gameState.ui.selectedSlot = null; renderTray(gameState); }
-function getSelectedSlot()      { return gameState.ui.selectedSlot; }
-function getSelectedPlant()     { return gameState.tray[gameState.ui.selectedSlot]; }
 
 
 /* Compose the hover tooltip body for a tray slot, dynamic from current state.
@@ -989,7 +897,8 @@ function slotTooltipContent(plant, idx) {
   // Substrate assignment (set in Substrate Lab — not a trait reveal).
   if (plant.assignedSubstrate) lines.push(tlv('substrate', 'Planted in', plant.assignedSubstrate));
   // Room-supplied action hint (e.g. Seed Bank's "Click to put back").
-  if (_trayClickHint) lines.push(`<span class="tt-row hub-unlock-hint">${_trayClickHint}</span>`);
+  const hint = typeof _trayClickHint === 'function' ? _trayClickHint(plant) : _trayClickHint;
+  if (hint) lines.push(`<span class="tt-row hub-unlock-hint">${hint}</span>`);
   return lines.join('');
 }
 
@@ -1116,10 +1025,11 @@ function killPlant(plant, cause) {
     plant: { ...plant, badges: [...(plant.badges || [])] },  // snapshot for autopsy
     cause,
     causeLabel: (DEATH_CAUSES[cause] || { label: cause }).label,
-    room: gameState.ui.currentScreen,
+    room: (ROOMS[(gameState.ui.currentScreen || '').replace(/^room:/, '')] || {}).label || gameState.ui.currentScreen,
   });
   plant.badges = [];                          // clear from the live slot view
   renderTray(gameState);
+  autosave();
   maybeEndRun();   // last living plant gone → every slot spent → run over
 }
 
@@ -1299,31 +1209,6 @@ function setActionZone(buttons) {
 
 
 /* ============================================================================
-   Devtools — right-side sidebar of sliders, color pickers, action buttons
-   Used by every demo. Each control either mutates a CSS custom property on
-   <html> (--badge-size etc.) or fires a JS callback (test actions).
-
-   Values persist to localStorage per-demo so reloads keep your tweaks.
-   "Fullscreen" hides the sidebar and scales the stage to fit the viewport.
-
-   Usage in a demo:
-     Devtools.mount({
-       demoName: 'demo-01',
-       onWrapStage: true,   // wraps body content in .dt-page; pass true once
-       sections: [
-         { title: 'Layout', controls: [
-           { kind: 'slider', label: 'Slot height', cssVar: '--slot-h',
-             min: 60, max: 100, step: 1, default: 80, unit: 'px' },
-           { kind: 'color',  label: 'Pip healthy', cssVar: '--pip-healthy',
-             default: '#44dd44' },
-         ]},
-         { title: 'Actions', controls: [
-           { kind: 'button', label: 'Reset', danger: false, onClick: () => {...} },
-         ]},
-       ],
-     });
-   ============================================================================ */
-/* ============================================================================
    Starfield — reusable canvas background. Per bible §9: "Space/void: #0a0a1a
    with static star dots". Adds a <canvas> into the target container, draws N
    dots at deterministic random positions, optionally animates a subtle alpha
@@ -1455,229 +1340,6 @@ function mountStarfield(container, opts = {}) {
 }
 
 
-const Devtools = (function () {
-  let root = null;        // sidebar element
-  let demoName = '';
-  let controlRegistry = []; // [{ctrl, valEl, applyDefault}]
-
-  function storageKey() { return `starseed-devtools-${demoName}`; }
-
-  function loadOverrides() {
-    try { return JSON.parse(localStorage.getItem(storageKey())) || {}; }
-    catch (_) { return {}; }
-  }
-  function saveOverrides(map) {
-    try { localStorage.setItem(storageKey(), JSON.stringify(map)); } catch (_) {}
-  }
-  function clearOverrides() {
-    try { localStorage.removeItem(storageKey()); } catch (_) {}
-  }
-  function setOverride(key, value) {
-    const m = loadOverrides();
-    if (value === null) delete m[key]; else m[key] = value;
-    saveOverrides(m);
-  }
-
-  function applyCssVar(cssVar, value) {
-    document.documentElement.style.setProperty(cssVar, value);
-  }
-
-  /* --- wrap existing body content in a .dt-page flex container so the
-         sidebar sits beside the stage --------------------------------- */
-  function wrapStage() {
-    if (document.querySelector('.dt-page')) return;
-    const wrap = document.createElement('div');
-    wrap.className = 'dt-page';
-    while (document.body.firstChild) wrap.appendChild(document.body.firstChild);
-    document.body.appendChild(wrap);
-  }
-
-  function buildRow(ctrl, idx) {
-    const row = document.createElement('div');
-    row.className = 'dt-row';
-
-    if (ctrl.kind === 'slider') {
-      const id = `dt-${idx}`;
-      const overrides = loadOverrides();
-      const initial = overrides[ctrl.cssVar] != null
-        ? parseFloat(overrides[ctrl.cssVar])
-        : ctrl.default;
-      const unit = ctrl.unit || '';
-      row.innerHTML = `
-        <label for="${id}">${ctrl.label}</label>
-        <input type="range" id="${id}" min="${ctrl.min}" max="${ctrl.max}" step="${ctrl.step || 1}" value="${initial}">
-        <span class="val">${initial}${unit}</span>`;
-      const input = row.querySelector('input');
-      const valEl = row.querySelector('.val');
-      const apply = (v, fromUser) => {
-        valEl.textContent = `${v}${unit}`;
-        applyCssVar(ctrl.cssVar, `${v}${unit}`);
-        valEl.classList.toggle('modified', +v !== ctrl.default);
-        if (fromUser) setOverride(ctrl.cssVar, `${v}${unit}`);
-        if (ctrl.onChange) ctrl.onChange(v);
-      };
-      input.addEventListener('input', e => apply(+e.target.value, true));
-      apply(initial, false);
-      controlRegistry.push({
-        ctrl, valEl, reset: () => { input.value = ctrl.default; apply(ctrl.default, false); }
-      });
-
-    } else if (ctrl.kind === 'color') {
-      const id = `dt-${idx}`;
-      const overrides = loadOverrides();
-      const initial = overrides[ctrl.cssVar] || ctrl.default;
-      row.innerHTML = `
-        <label for="${id}">${ctrl.label}</label>
-        <input type="color" id="${id}" value="${initial}">
-        <span class="val">${initial}</span>`;
-      const input = row.querySelector('input');
-      const valEl = row.querySelector('.val');
-      const apply = (v, fromUser) => {
-        valEl.textContent = v;
-        applyCssVar(ctrl.cssVar, v);
-        valEl.classList.toggle('modified', v.toLowerCase() !== ctrl.default.toLowerCase());
-        if (fromUser) setOverride(ctrl.cssVar, v);
-        if (ctrl.onChange) ctrl.onChange(v);
-      };
-      input.addEventListener('input', e => apply(e.target.value, true));
-      apply(initial, false);
-      controlRegistry.push({
-        ctrl, valEl, reset: () => { input.value = ctrl.default; apply(ctrl.default, false); }
-      });
-
-    } else if (ctrl.kind === 'select') {
-      const id = `dt-${idx}`;
-      const overrides = loadOverrides();
-      const persistKey = ctrl.persistKey || `select:${idx}`;
-      const initial = overrides[persistKey] || ctrl.default;
-      const opts = ctrl.options.map(o =>
-        `<option value="${o.value}" ${o.value === initial ? 'selected' : ''}>${o.label}</option>`
-      ).join('');
-      row.innerHTML = `
-        <label for="${id}">${ctrl.label}</label>
-        <select id="${id}">${opts}</select>`;
-      const select = row.querySelector('select');
-      select.addEventListener('change', e => {
-        setOverride(persistKey, e.target.value);
-        if (ctrl.onChange) ctrl.onChange(e.target.value);
-      });
-      if (ctrl.onChange) ctrl.onChange(initial);
-
-    } else if (ctrl.kind === 'note') {
-      row.className = 'dt-note';
-      row.textContent = ctrl.text;
-    }
-    return row;
-  }
-
-  function buildButtonRow(controls) {
-    const row = document.createElement('div');
-    row.className = 'dt-btn-row';
-    controls.forEach(ctrl => {
-      const b = document.createElement('button');
-      b.className = 'dt-btn' + (ctrl.danger ? ' danger' : ctrl.go ? ' go' : '');
-      b.textContent = ctrl.label;
-      b.addEventListener('click', ctrl.onClick);
-      row.appendChild(b);
-    });
-    return row;
-  }
-
-  function mount(opts) {
-    demoName = opts.demoName || 'unknown';
-    controlRegistry = [];
-
-    if (opts.onWrapStage !== false) wrapStage();
-
-    if (root) root.remove();
-    root = document.createElement('div');
-    root.className = 'devtools-sidebar';
-
-    // Header — title + fullscreen + reset
-    root.innerHTML = `
-      <h2>Devtools</h2>
-      <div class="dt-header-row">
-        <button class="dt-btn go" id="dt-fullscreen">⛶ Fullscreen</button>
-        <button class="dt-btn danger" id="dt-reset-all">↺ Reset all</button>
-      </div>`;
-
-    (opts.sections || []).forEach(section => {
-      const h3 = document.createElement('h3');
-      h3.textContent = section.title;
-      root.appendChild(h3);
-
-      // Buttons grouped into a button row; sliders/colors/selects each get their own row.
-      const buttons = section.controls.filter(c => c.kind === 'button');
-      const others  = section.controls.filter(c => c.kind !== 'button');
-
-      others.forEach((c, i) => root.appendChild(buildRow(c, `${section.title}-${i}`)));
-      if (buttons.length) root.appendChild(buildButtonRow(buttons));
-    });
-
-    // Sidebar must live inside .dt-page so it participates in the flex layout
-    // and sits next to the stage. (Earlier bug: appending to body left it
-    // stacked below the stage, hidden by overflow.)
-    const flexTarget = document.querySelector('.dt-page') || document.body;
-    flexTarget.appendChild(root);
-
-    // Fullscreen button + floating exit button
-    const fsBtn = root.querySelector('#dt-fullscreen');
-    fsBtn.addEventListener('click', toggleFullscreen);
-
-    if (!document.querySelector('.fs-exit')) {
-      const fsExit = document.createElement('button');
-      fsExit.className = 'dt-btn go fs-exit';
-      fsExit.textContent = '⛶ Exit fullscreen';
-      fsExit.addEventListener('click', toggleFullscreen);
-      document.body.appendChild(fsExit);
-    }
-
-    // Reset all button
-    root.querySelector('#dt-reset-all').addEventListener('click', () => {
-      clearOverrides();
-      controlRegistry.forEach(r => r.reset());
-    });
-  }
-
-  function applyFullscreenScale() {
-    if (!document.body.classList.contains('fullscreen-mode')) {
-      document.documentElement.style.setProperty('--fs-scale', '1');
-      return;
-    }
-    const sw = window.innerWidth  / 1280;
-    const sh = window.innerHeight / 720;
-    document.documentElement.style.setProperty('--fs-scale', Math.min(sw, sh));
-  }
-
-  function toggleFullscreen() {
-    document.body.classList.toggle('fullscreen-mode');
-    applyFullscreenScale();
-  }
-
-  // Keep scale in sync with viewport while fullscreen is active.
-  window.addEventListener('resize', applyFullscreenScale);
-
-  return { mount, toggleFullscreen, applyFullscreenScale };
-})();
-
-
-/* ============================================================================
-   Remaining stubs — real bodies arrive in their respective demos.
-   ============================================================================ */
-/* IMPORTANT: do not declare stubs with the same name as a real implementation
-   elsewhere in this file. function declarations are hoisted with the LAST
-   winning, so a later stub silently overrides the real function. (Spent
-   half a debugging session on this — Demo 01's kill buttons stayed silent
-   because a stub `function killPlant() {}` lived below the real one.)
-   Remove a stub line as soon as you implement that function above. */
-/* deductFood / agePlant / revealTrait / addStressMarker + the resolveRoomAction
-   wrapper and substrate trait data are implemented in the "Room action
-   resolution" section below (Demo 05). Implemented there, not stubbed here, to
-   avoid the hoisting trap this comment warns about. */
-/* saveState / loadState are implemented in the "Demo 15 — Full integration"
-   section at the end of this file (localStorage key 'starseed-station-save'). */
-
-
 /* ============================================================================
    Room action resolution (Demo 05 — SHARED; every room 06+ reuses this)
    The bible's "press the action button" flow: deduct one colony-food unit, age
@@ -1738,15 +1400,14 @@ function stageLockReason(roomKey, plant, done) {
   const need = ROOM_INPUT_STAGE[roomKey];
   return need ? `Needs<br>${STAGE_LABEL[need] || need}` : null;
 }
-/* Living plants a grow room still has business with this visit: those at its
-   input stage (processable) OR already processed (`doneFlag` truthy on the
-   plant). A living plant of another stage can't enter, so it must NOT block the
-   room's "all done" check — this is the deferred Demo 06 last-<4-batch gap,
-   generalized to the stage gate: room-complete = returned list non-empty AND
-   every member done. */
-function stageInPlay(roomKey, doneFlag) {
-  return gameState.tray.filter(p => p && p.health > 0 &&
-    (roomAcceptsStage(roomKey, p) || p[doneFlag]));
+/* A grow room is COMPLETE when every living plant is past its input stage —
+   i.e. nothing in the tray will ever need this room again. Plants still BELOW
+   the input stage (unplanted seeds for the Pipe Maze, sprouts for the Light
+   Lab) keep the room in-progress, so the hub ✓ never lies. */
+function stageRoomComplete(roomKey) {
+  const need = GROWTH_STAGES.indexOf(ROOM_INPUT_STAGE[roomKey]);
+  const living = gameState.tray.filter(p => p && p.health > 0);
+  return living.length > 0 && living.every(p => GROWTH_STAGES.indexOf(p.stage) > need);
 }
 
 /* deductFood — the single choke point for "a room action happened." Subtracts
@@ -1758,6 +1419,7 @@ function deductFood(amount = 1) {
   run.actionCount = (run.actionCount || 0) + 1;
   run.foodSpent   = (run.foodSpent || 0) + (amount || 0);
   updateFoodBar(run.colonyFood, run.colonyQuota);
+  autosave();
   if (run.colonyFood <= 0) maybeEndRun();
   return run.colonyFood;
 }
@@ -1769,6 +1431,7 @@ function addFood(amount = 1) {
   run.colonyFood += (amount || 0);
   run.foodEarned = (run.foodEarned || 0) + (amount || 0);
   updateFoodBar(run.colonyFood, run.colonyQuota);
+  autosave();
   return run.colonyFood;
 }
 
@@ -1782,6 +1445,7 @@ function agePlant(plant) {
   plant.stage = GROWTH_STAGES[Math.min(plant.actionAge, GROWTH_STAGES.length - 1)];
   if (plant.stage === 'flowering') plant.flowered = true;
   if (from !== plant.stage) onStageAdvanced(plant, from, plant.stage);
+  autosave();
   return { from, to: plant.stage };
 }
 
@@ -1818,6 +1482,7 @@ function revealTrait(plant, key) {
   if (!plant.badges.some(b => b.kind === f.badge))
     plant.badges.push({ kind: f.badge, value });
   renderTray(gameState);
+  autosave();
 }
 
 /* Stress markers that, on lethal pip loss, map to an autopsy cause. */
@@ -1856,6 +1521,7 @@ function addStressMarker(plant, marker) {
     }
   }
   renderTray(gameState);
+  autosave();
 }
 
 /* resolveRoomAction — the shared "press the action button" wrapper. Deducts
@@ -1955,7 +1621,7 @@ const PH_BANDS = {                              // thrive zone per hidden prefer
   neutral:  { lo: 6.5, hi: 7.5 },
   alkaline: { lo: 7.5, hi: 9.0 },
 };
-const PH_PREF_TARGET = { acidic: 5.7, neutral: 7.0, alkaline: 8.3 };   // ideal centers
+
 const EC_BAND  = { lo: 1.5, hi: 2.5 };          // thrive EC window (of the 0–5 scale)
 const EC_HIGH  = 2.9;                           // above this → EC-too-high salt stress (−1)
 
@@ -1996,9 +1662,7 @@ const ROOMS = {
 };
 
 /* Complete-state ✓ anchors per room, in panel coordinates (same space as the
-   hotspots). Tuned via the Demo 03 anchor-tuning UI to land each ✓ at the
-   end of its room's title banner. Mutated by setCompleteAnchor() at runtime
-   and exported via dumpCompleteAnchors() for paste-back into this table. */
+   hotspots) — each ✓ lands at the end of its room's title banner. */
 const COMPLETE_ANCHORS = {
   center     : { x:  759, y: 160 },
   substrate  : { x:  418, y:  12 },
@@ -2011,23 +1675,6 @@ const COMPLETE_ANCHORS = {
   pollination: { x:  328, y: 158 },
 };
 
-function setCompleteAnchor(key, x, y) {
-  if (!COMPLETE_ANCHORS[key]) return;
-  COMPLETE_ANCHORS[key] = { x: Math.round(x), y: Math.round(y) };
-  renderHub(gameState);
-}
-/* Print all anchors to console in a paste-ready format. Used by the "Export"
-   button in Devtools — you copy the console output and hand it back. */
-function dumpCompleteAnchors() {
-  const lines = ['const COMPLETE_ANCHORS_OVERRIDES = {'];
-  Object.entries(COMPLETE_ANCHORS).forEach(([k, a]) => {
-    lines.push(`  ${k.padEnd(11)}: { x: ${String(a.x).padStart(4)}, y: ${String(a.y).padStart(3)} },`);
-  });
-  lines.push('};');
-  const out = lines.join('\n');
-  console.log(out);
-  return out;
-}
 
 /* Bible §5 unlock conditions — shown as tooltip text on locked rooms. */
 const UNLOCK_HINTS = {
@@ -2073,13 +1720,13 @@ function resetHubRooms(state, { clearTray = false } = {}) {
   if (state.moduleState.substrate)   state.moduleState.substrate.hasAgarGelAssignment = false;
   if (state.moduleState.orientation) state.moduleState.orientation.gravityRevealed = false;
   state.centerRoom.mode = 'seedbank';
-  state.centerRoom.harvestReady = [];
   state.run.actionCount = 0;
   state.run.colonyFood = 80;
   state.run.colonyQuota = 100;
   // New run → re-roll the seed rack scatter on next Seed Bay visit, and clear the
   // selection-complete flag (Bible §5 unlock trigger).
   state.run.seedBankSelectionComplete = false;
+  state.run.waterTank = null;
   state.seedBank.rackLayout = null;
   state.substrateLab = null;   // discard any in-progress Substrate Lab bench
   state.pipeMaze = null;       // discard any in-progress Pipe Maze bench
@@ -2098,7 +1745,6 @@ function resetHubRooms(state, { clearTray = false } = {}) {
   if (clearTray) {
     state.tray = [null, null, null, null, null, null, null, null];
     state.deadTray = [];
-    state.autopsyLog = [];
     state.ui.selectedSlot = null;
   }
 }
@@ -2113,6 +1759,7 @@ function unlockRoom(key, { animate = true } = {}) {
   if (!animate) {
     m.status = 'ready';
     renderHub(gameState);
+    autosave();
     return;
   }
   m.status = 'unlocking';
@@ -2124,6 +1771,7 @@ function unlockRoom(key, { animate = true } = {}) {
     if (m.status === 'unlocking') {
       m.status = 'ready';
       renderHub(gameState);
+      autosave();   // the hub autosave already ran BEFORE this timer — persist the unlock now
     }
   }, UNLOCK_FADE_MS + 60);
 }
@@ -2150,80 +1798,6 @@ function setRoomStatus(key, status) {
 function markInProgress(key) { setRoomStatus(key, 'in-progress'); }
 function markComplete(key)   { setRoomStatus(key, 'complete'); }
 
-
-/* ============================================================================
-   Snapshot / restore — devtools state-management helpers. Used to capture and
-   replay arbitrary game states without going through the unlock sequence,
-   reproducing bugs, or sharing a specific configuration between team
-   members. Demo 15 will own real persistence; these are testing-only utilities.
-
-   Storage layout: localStorage entries `starseed-snapshot-<slot>` hold the
-   JSON-stringified gameState. dumpGameState() prints to console for sharing
-   between sessions / users. loadGameStateFromString() accepts either a JSON
-   string or a parsed object, merging properties into the live gameState (NOT
-   reassigning it, so existing references stay valid).
-   ============================================================================ */
-function dumpGameState() {
-  const json = JSON.stringify(gameState, null, 2);
-  console.log('--- gameState snapshot ---');
-  console.log(json);
-  return json;
-}
-
-function loadGameStateFromString(input) {
-  const parsed = typeof input === 'string' ? JSON.parse(input) : input;
-  Object.assign(gameState.run, parsed.run || {});
-  if (parsed.tray)        gameState.tray = parsed.tray;
-  if (parsed.deadTray)    gameState.deadTray = parsed.deadTray;
-  if (parsed.autopsyLog)  gameState.autopsyLog = parsed.autopsyLog;
-  Object.keys(parsed.moduleState || {}).forEach(k => {
-    if (gameState.moduleState[k]) {
-      Object.assign(gameState.moduleState[k], parsed.moduleState[k]);
-    }
-  });
-  Object.assign(gameState.centerRoom, parsed.centerRoom || {});
-  Object.assign(gameState.ui,         parsed.ui         || {});
-  // Re-render everything that's visible on a hub-style demo.
-  renderHub(gameState);
-  renderTray(gameState);
-  // Top bar room name follows the current screen.
-  const screen = gameState.ui.currentScreen || 'hub';
-  const roomName = screen === 'hub'
-    ? 'STATION HUB'
-    : (ROOMS[screen.replace(/^room:/, '')]?.label || 'STATION HUB');
-  renderTopBar({
-    roomName,
-    food:        gameState.run.colonyFood,
-    quota:       gameState.run.colonyQuota,
-    actionCount: gameState.run.actionCount,
-  });
-}
-
-function saveStateToSlot(slot) {
-  try {
-    localStorage.setItem('starseed-snapshot-' + slot, JSON.stringify(gameState));
-    return true;
-  } catch (e) {
-    console.error('Save failed:', e);
-    return false;
-  }
-}
-
-function loadStateFromSlot(slot) {
-  const s = localStorage.getItem('starseed-snapshot-' + slot);
-  if (!s) return false;
-  try {
-    loadGameStateFromString(s);
-    return true;
-  } catch (e) {
-    console.error('Load failed:', e);
-    return false;
-  }
-}
-
-function hasStateInSlot(slot) {
-  return localStorage.getItem('starseed-snapshot-' + slot) != null;
-}
 
 /* Center room mode toggle. 'seedbank' = default, 'harvest' = green pulse +
    label_harvest_room.png overlay. Center isn't in moduleState; its display
@@ -2452,11 +2026,15 @@ function renderHub(state) {
    screenId formats:
      'hub'          → return to hub
      'room:<key>'   → enter a placeholder room                                   */
+let _transitionBusy = false;   // one slide at a time — a double-click must not mount two screens
 function transitionTo(screenId, dir) {
   const panel = document.getElementById('game-panel');
   if (!panel) return;
   const hub = document.getElementById('hub-layer');
   if (!hub) return;
+  if (_transitionBusy) return;
+  _transitionBusy = true;
+  setTimeout(() => { _transitionBusy = false; }, SLIDE_MS);
 
   const isReturn = screenId === 'hub';
 
@@ -2868,6 +2446,20 @@ function buildPacketBack(speciesId, w, h) {
   return back;
 }
 
+/* Rack-hover blurbs — the real-world crop + safe flavour only. SPECIES.notes
+   are design notes that name hidden traits, so they must never reach the UI. */
+const SPECIES_BLURB = {
+  1: 'cherry tomato — an ISS favourite',    2: 'lettuce — fast and forgiving',
+  3: 'mustard greens — peppery leaves',     4: 'radish — crisp, quick root crop',
+  5: 'sunflower — tall and bright',         6: 'mung bean — a nitrogen-fixing vine',
+  7: 'bell pepper — a long growing cycle',  8: 'potato — the colony\u2019s staple starch',
+  9: 'dwarf wheat — bread for the colony',  10: 'kale — a hardy beginner\u2019s crop',
+  11: 'basil — aromatic and heat-loving',   12: 'snow pea — sweet climbing pods',
+  13: 'yam — a slow, starchy tuber',        14: 'watercress — extremely fast grower',
+  15: 'sweet potato — vigorous vine, hidden tubers', 16: 'cantaloupe — a warm-loving melon',
+  17: 'white eggplant — glossy pale fruit', 18: 'butternut squash — a slow, sprawling vine',
+  19: 'peppermint — a spreading herb',      20: 'cereal rye — a tough grain',
+};
 function seedPacketTooltip(id) {
   const sp = SPECIES[id];
   if (isSpeciesLocked(id)) {
@@ -2876,7 +2468,7 @@ function seedPacketTooltip(id) {
            `<span class="tt-row">Not available in this scenario.</span>`;
   }
   return `<span class="tt-name">${sp.name}</span>` +
-         `<span class="tt-row">${sp.notes || ''}</span>`;
+         `<span class="tt-row">${SPECIES_BLURB[id] || ''}</span>`;
 }
 
 /* Builder + incremental renderer ------------------------------------------- */
@@ -2900,7 +2492,7 @@ function buildSeedBankRoom(key) {
 
   // Seed-bank-only tray behavior + exit button.
   setSlotClickHandler(seedBankSlotClick);
-  setTrayClickHint('Click to put back');
+  setTrayClickHint(p => (p.health > 0 && p.stage === 'seed') ? 'Click to put back' : null);
   updateSeedBankExitButton();
 
   renderSeedBank(gameState, wrap);
@@ -3064,17 +2656,6 @@ function fitSeedBankName() {
   }
 }
 
-/* Rebuild the open card's front face in place — used by the trait-placement
-   devtools so PACKET_TRAIT_ROW tweaks preview live. No-op if nothing is open. */
-function refreshFloatingFront() {
-  const f = gameState.ui.seedBankFloatingPacket;
-  if (!f) return;
-  const front = f.wrap.querySelector('.card-face.front');
-  if (!front) return;
-  front.innerHTML = '';
-  front.appendChild(buildPacketFace(f.entry.speciesId, f.entry.family, SEED_BANK_FLOAT.w, SEED_BANK_FLOAT.h, true));
-  fitSeedBankName();
-}
 
 function takeFloating() {
   const f = gameState.ui.seedBankFloatingPacket;
@@ -3107,7 +2688,10 @@ function takeFloating() {
 /* Tray click in the Seed Bank = return that plant to the rack (free the slot),
    with a fly-back animation that mirrors Take It. */
 function seedBankSlotClick(idx) {
-  if (gameState.tray[idx]) returnSeedToRack(idx);
+  const p = gameState.tray[idx];
+  // Only an unplanted seed can go back on the shelf — a growing or dead plant
+  // stays put (the Seed Bank is reachable mid-run; it must never undo progress).
+  if (p && p.health > 0 && p.stage === 'seed') returnSeedToRack(idx);
   return true;   // suppress the default select-toggle while in the Seed Bank
 }
 
@@ -3280,18 +2864,12 @@ const SUBSTRATE_CIRCLES = [
   { x:  914, y: 474, w: 180, h: 46 },   // circle 8
 ];
 
-/* Runtime-tunable bench rendering knobs (Demo 05 Devtools drives these). */
-let SUB_TUNE = {
+/* Bench rendering knobs. */
+const SUB_TUNE = {
   seedlingSize: 64, fillZoom: 115,        // seedling px; substrate fill zoom %
   outline: 1.5, outlineColor: '#feffff',  // seedling outline px + color
   dim: 1, pop: 1,                         // substrate-fill brightness; seedling vividness
 };
-function setSubstrateSeedlingSize(px)    { SUB_TUNE.seedlingSize = px; renderSubstrateLab(gameState); }
-function setSubstrateFillZoom(pct)       { SUB_TUNE.fillZoom = pct;    renderSubstrateLab(gameState); }
-function setSubstrateSeedlingOutline(px) { SUB_TUNE.outline = px;      renderSubstrateLab(gameState); }
-function setSubstrateOutlineColor(c)     { SUB_TUNE.outlineColor = c;  renderSubstrateLab(gameState); }
-function setSubstrateDim(mult)           { SUB_TUNE.dim = mult;        renderSubstrateLab(gameState); }
-function setSubstratePop(mult)           { SUB_TUNE.pop = mult;        renderSubstrateLab(gameState); }
 
 /* Compose the bench seedling's filter: species color filter (none for now) +
    an optional vividness "pop" + a thin outline tracing the sprite's alpha
@@ -3486,7 +3064,7 @@ function renderSubstrateLab(state, screenEl) {
         x = document.createElement('div');
         x.className = 'sub-clear';
         x.textContent = '×';
-        x.addEventListener('click', (e) => { e.stopPropagation(); clearActiveSpot(); });
+        x.addEventListener('click', (e) => { e.stopPropagation(); clearActiveSubstrateSpot(); });
         attachTooltip(x, () => `<span class="tt-name">Clear this spot</span>` +
                                `<span class="tt-row">Remove the substrate &amp; seed</span>`);
         el.appendChild(x);
@@ -3638,7 +3216,7 @@ function substrateTraySeedClick(idx) {
   return true;
 }
 
-function clearActiveSpot() {
+function clearActiveSubstrateSpot() {
   const lab = ensureSubstrateLabState();
   if (lab.activeSpot == null) return;
   lab.circles[lab.activeSpot] = { subId: null, slotIndex: null };  // reset the whole spot
@@ -3681,8 +3259,8 @@ function clearCircleFlashes() {
     el.classList.remove('flash-correct', 'flash-tolerated', 'flash-stress'));
 }
 
-function shakeActionButton() {
-  const b = document.querySelector('.action-btn');
+function shakeActionButton(idx = 0) {
+  const b = document.querySelectorAll('.action-zone .action-btn')[idx];
   if (!b) return;
   b.classList.remove('nope');
   void b.offsetWidth;
@@ -3730,12 +3308,11 @@ function plantSeeds() {
       outcomes[plant.slotIndex] = outcome;
 
       plant.assignedSubstrate = SUBSTRATE_META[subId].label;
-      if (!plant.badges.some(b => b.kind === 'substrate-assigned'))
-        plant.badges.push({ kind: 'substrate-assigned', value: SUBSTRATE_META[subId].label });
-      if (subId === 'agar') {
-        plant.isHydroponic = true;
-        gameState.moduleState.substrate.hasAgarGelAssignment = true;
-      }
+      const assigned = plant.badges.find(b => b.kind === 'substrate-assigned');
+      if (assigned) assigned.value = SUBSTRATE_META[subId].label;   // re-plant → badge follows
+      else plant.badges.push({ kind: 'substrate-assigned', value: SUBSTRATE_META[subId].label });
+      plant.isHydroponic = (subId === 'agar');   // re-planting out of agar clears it
+      if (subId === 'agar') gameState.moduleState.substrate.hasAgarGelAssignment = true;
       if (outcome === 'stress') {
         revealTrait(plant, 'substrate');
         addStressMarker(plant, {
@@ -3756,7 +3333,11 @@ function plantSeeds() {
     if (el) { void el.offsetWidth; el.classList.add('flash-' + outcomes[o.c.slotIndex]); }
   });
 
-  const win = !ready.some(o => outcomes[o.c.slotIndex] === 'stress');
+  // The room is COMPLETE only when no living seed is left to plant (a stressed
+  // seed didn't age, so it stays a seed and must be re-planted) — not merely
+  // when this batch went well; the hub ✓ must mean "nothing left to do here".
+  const seedsLeft = gameState.tray.some(p => p && p.health > 0 && p.stage === 'seed');
+  const win = !seedsLeft;
 
   // After the flash, fly the seedlings back to the tray, clear circles, finish.
   setTimeout(() => {
@@ -3853,18 +3434,14 @@ registerRoomBuilder('substrate', buildSubstrateLab);
        (flood >target / drought <target) leaves a −1-pip badge. Room completes
        when every living plant is watered. Limited water: no refill until a new
        run, so over-watering can run you dry.
-   Valves are baked into the bg (no interaction) — pm.valves stays all-open; a
-   scenario can still close one to drought a branch. Coords from 06a.
+   Valves are baked into the bg (no interaction). Coords from 06a.
 
    SHARED PRIMITIVES below (renderGauge / dialAngle+drag / animatePipeFlow /
-   particleBurst; applyValveFrame kept for future valve scenarios) are generic
-   for reuse by the Light Lab, Mixing Console, and Hydroponic Bay.
+   particleBurst) are generic for reuse by the Light Lab, Mixing Console, and
+   Hydroponic Bay.
    ============================================================================ */
 
 /* --- measured coords (06a) ------------------------------------------------- */
-const PIPE_VALVES = {
-  V1: { x: 500, y: 355 }, V2: { x: 581, y: 238 }, V3: { x: 602, y: 483 },
-};
 const PIPE_RESTRICTORS = {
   D1: { x: 723, y: 118 }, D2: { x: 723, y: 236 }, D3: { x: 723, y: 410 }, D4: { x: 723, y: 517 },
 };
@@ -3903,54 +3480,32 @@ const WATER_TARGET = {
 const PIPE_PARENT = {};
 Object.entries(PIPE_TOPOLOGY.edges).forEach(([p, kids]) => kids.forEach(k => { PIPE_PARENT[k] = p; }));
 
-/* Runtime-tunable rendering knobs (Devtools drives these). flowSpeed is px/ms —
+/* Rendering knobs. flowSpeed is px/ms —
    a CONSTANT speed so the water head flows seamlessly across segment joints
    (each fork starts exactly when its parent segment's head arrives). */
-let PIPE_TUNE = {
-  valveSize: 56, dialSize: 48, sourceSize: 46, flowSpeed: 0.85,
+const PIPE_TUNE = {
+  dialSize: 48, sourceSize: 46, flowSpeed: 0.85,
   tankCapacity: 600,   // total fill-units of water per RUN (one tankful, no refill)
   yellowPad: 12,       // ± window outside a plant's target that still grades "near" (tolerated)
 };
-function setPipeValveSize(px)  { PIPE_TUNE.valveSize  = px; renderPipeMaze(gameState); }
-function setPipeDialSize(px)   { PIPE_TUNE.dialSize   = px; renderPipeMaze(gameState); }
-function setPipeSourceSize(px) { PIPE_TUNE.sourceSize = px; renderPipeMaze(gameState); }
-function setPipeTankCapacity(n){ PIPE_TUNE.tankCapacity = n; const pm = gameState.pipeMaze; if (pm) { pm.tankMax = n; pm.tank = Math.min(pm.tank, n); } renderPipeMaze(gameState); }
 
 /* Wasted-water spray tunables (canvas particles). The DIAL setting (intensity
    0-100) scales power (launch speed/distance), count, and life toward these
    maxima; gravity/size/spread/fade are absolute. */
-let SPRAY_TUNE = { power: 6, gravity: 0.2, count: 70, life: 1800, size: 3, spread: 2.6, fade: 0.85 };
-function setSprayTune(key, v) { SPRAY_TUNE[key] = v; }
+const SPRAY_TUNE = { power: 6, gravity: 0.2, count: 70, life: 1800, size: 3, spread: 2.6, fade: 0.85 };
 
 /* --- flow resolver --------------------------------------------------------- */
-/* Valves on the root-path up from a node (the node itself if it's a valve). */
-function pipeChainValves(nodeId) {
-  const vs = []; let n = nodeId;
-  while (n) { if (PIPE_VALVES[n]) vs.push(n); n = PIPE_PARENT[n]; }
-  return vs;
-}
-/* Ports downstream of a valve (its whole subtree's leaves). */
-function valveDownstreamPorts(vid) {
-  const out = [], stack = [...(PIPE_TOPOLOGY.edges[vid] || [])];
-  while (stack.length) {
-    const n = stack.pop();
-    if (PIPE_PORTS[n]) out.push(n);
-    else (PIPE_TOPOLOGY.edges[n] || []).forEach(c => stack.push(c));
-  }
-  return out;
-}
 function portDialId(pid)  { return PIPE_TOPOLOGY.portDial[pid] || null; }
 function dialPortId(did)  { return Object.keys(PIPE_TOPOLOGY.portDial).find(p => PIPE_TOPOLOGY.portDial[p] === did) || null; }
 
-/* Per-port flow: powered (all path valves open) + the gauge fill % its dial sets. */
+/* Per-port flow: the gauge fill % its dial sets. */
 function computePipeFlow(state) {
   const pm = state.pipeMaze || ensurePipeMazeState();
   const out = {};
   Object.keys(PIPE_PORTS).forEach(pid => {
-    const powered = pipeChainValves(pid).every(v => pm.valves[v] !== false);
     const did = portDialId(pid);
     const dial = (did != null && pm.dials[did] != null) ? pm.dials[did] : 100;
-    out[pid] = { powered, dial: Math.round(dial), fill: powered ? Math.round(dial) : 0 };
+    out[pid] = { dial: Math.round(dial), fill: Math.round(dial) };
   });
   return out;
 }
@@ -3968,17 +3523,6 @@ function pipeGrade(plant, fill) {
 }
 
 /* --- shared primitives (reusable across water/light/nutrient rooms) -------- */
-/* Paint a valve-wheel frame ('closed'|'turning'|'open') onto a square element. */
-function applyValveFrame(el, frame, size) {
-  const f = VALVE_COORDS[frame] || VALVE_COORDS.closed;
-  const scale = size / f.w;
-  el.style.width = size + 'px';
-  el.style.height = size + 'px';
-  el.style.backgroundImage = `url('${assetUrl('valve-wheel-sheet')}')`;
-  el.style.backgroundSize = `${VALVE_SHEET.w * scale}px ${VALVE_SHEET.h * scale}px`;
-  el.style.backgroundPosition = `-${f.x * scale}px -${f.y * scale}px`;
-  el.style.backgroundRepeat = 'no-repeat';
-}
 /* pct (0-100) → needle angle, full 360° clockwise from up. 0/100% point up
    (seam at top), 25% = 3 o'clock, 50% = straight down, 75% = 9 o'clock. Full
    sweep so any position (incl. straight down) is reachable with no dead zone. */
@@ -4101,16 +3645,13 @@ function ensurePipeMazeState() {
     gameState.pipeMaze = {
       phase: 'setup',   // 'setup' = place 4 + tune dials; 'resolved' = grown, click to return
       activePort: null,
-      // Valves are baked into the bg now (no interaction) — kept all-open so the
-      // flow/animation helpers still treat every branch as live.
-      valves: Object.fromEntries(Object.keys(PIPE_VALVES).map(v => [v, true])),
       dials:  Object.fromEntries(Object.keys(PIPE_RESTRICTORS).map(d => [d, 50])), // 50%
       // port: { slotIndex, grade ('ok'|'near'|'far' after a press), lastFill
       //         (delivered % shown after a press), outcome ('correct'|'tolerated'|
       //         'flood'|'drought' — applied as a badge when the player returns it) }
       ports:  Object.fromEntries(Object.keys(PIPE_PORTS).map(p => [p, { slotIndex: null, grade: null, lastFill: 0, outcome: null }])),
       tankMax: PIPE_TUNE.tankCapacity,   // per-run water; depletes as delivered, no refill
-      tank:    PIPE_TUNE.tankCapacity,
+      tank:    gameState.run.waterTank != null ? gameState.run.waterTank : PIPE_TUNE.tankCapacity,
     };
   }
   return gameState.pipeMaze;
@@ -4118,7 +3659,6 @@ function ensurePipeMazeState() {
 
 /* --- DOM helpers ----------------------------------------------------------- */
 function pipeScreen() { return document.querySelector('.pipe-screen'); }
-function valveEl(id)  { const s = pipeScreen(); return s && s.querySelector(`.pipe-valve[data-id="${id}"]`); }
 function dialEl(id)   { const s = pipeScreen(); return s && s.querySelector(`.pipe-dial[data-id="${id}"]`); }
 function portEl(id)   { const s = pipeScreen(); return s && s.querySelector(`.pipe-port[data-id="${id}"]`); }
 function gaugeEl(id)  { const s = pipeScreen(); return s && s.querySelector(`.pipe-gauge[data-id="${id}"]`); }
@@ -4185,7 +3725,7 @@ function buildPipeMaze(key) {
     el.style.top  = c.y + 'px';
     el.innerHTML = '<div class="needle"></div><div class="hub"></div>';
     el.addEventListener('mousedown', (e) => { e.stopPropagation(); startDialDrag(e, id); });
-    attachTooltip(el, () => dialTooltip(id), 'left');
+    attachTooltip(el, () => pipeDialTooltip(id), 'left');
     overlay.appendChild(el);
   });
 
@@ -4325,14 +3865,6 @@ function renderPipeMaze(state, screenEl) {
 }
 
 /* --- guided flow ----------------------------------------------------------- */
-function pipeStep() {
-  const pm = ensurePipeMazeState();
-  if (pm.activePort != null && pm.ports[pm.activePort].slotIndex == null) return 'seed';
-  const anyEmpty   = Object.keys(PIPE_PORTS).some(p => pm.ports[p].slotIndex == null);
-  const anyFree    = gameState.tray.some((pl, i) => pl && pl.health > 0 && !portUsesSlot(i));
-  if (anyEmpty && anyFree) return 'place';
-  return 'tune';
-}
 function portUsesSlot(idx) {
   const pm = gameState.pipeMaze;
   return !!pm && Object.values(pm.ports).some(p => p.slotIndex === idx);
@@ -4352,8 +3884,7 @@ function updatePipeGuide(root) {
   const running   = pm.phase === 'running';
   const seeding   = setup && pm.activePort != null && pm.ports[pm.activePort].slotIndex == null;
 
-  const inPlay = stageInPlay('water', 'watered');
-  const allWatered = inPlay.length > 0 && inPlay.every(p => p.watered);
+  const allWatered = stageRoomComplete('water');
 
   // Dim + mark tray plants that are the wrong stage for this room (soft lock),
   // skipping ones already watered or in a port (they show their own state).
@@ -4441,17 +3972,6 @@ function clearActivePort() {
   pm.ports[pm.activePort].slotIndex = null;
   renderPipeMaze(gameState);
 }
-function toggleValve(id) {
-  const pm = ensurePipeMazeState();
-  pm.valves[id] = !(pm.valves[id] !== false);   // flip
-  const el = valveEl(id);
-  if (el) {                                      // brief "turning" frame
-    el.classList.add('turning');
-    applyValveFrame(el, 'turning', PIPE_TUNE.valveSize);
-    setTimeout(() => { el.classList.remove('turning'); renderPipeMaze(gameState); }, 150);
-  }
-  renderPipeMaze(gameState);
-}
 /* Floating "42%" readout above the dial while tuning; fades out on release. */
 function showDialReadout(id, pct) {
   const wrap = pipeScreen();
@@ -4504,13 +4024,12 @@ function clearGaugeFlashes() {
   document.querySelectorAll('.pipe-gauge, .pipe-port').forEach(el =>
     el.classList.remove('flash-ok', 'flash-near', 'flash-far'));
 }
-/* Animate water along every LIVE edge at a constant pixel speed, chaining each
+/* Animate water along every edge at a constant pixel speed, chaining each
    segment's start to when its parent segment finishes — so the head crosses
    joints with no visible seam. Returns the total animation length (ms). */
 function animatePoweredFlow() {
   const wrap = pipeScreen();
   if (!wrap) return 600;
-  const pm = gameState.pipeMaze;
   const speed = PIPE_TUNE.flowSpeed || 0.85;       // px per ms
   const pathByTo = {};                              // node id → the edge ending there
   Object.entries(PIPE_PATHS).forEach(([id, p]) => { pathByTo[p.to] = id; });
@@ -4533,8 +4052,6 @@ function animatePoweredFlow() {
   Object.entries(PIPE_PATHS).forEach(([id, path]) => {
     const el = wrap.querySelector(`.pipe-flow[data-id="${id}"]`);
     if (!el) return;
-    const live = pipeChainValves(path.from).every(v => pm.valves[v] !== false);
-    if (!live) { el.style.transition = 'none'; el.style.opacity = '0'; return; }
     el.dataset.animating = '1';
     const d = delayOf(id);
     animatePipeFlow(el, dur[id], d);
@@ -4640,6 +4157,7 @@ function pressurize() {
   });
   deductFood(1);
   pm.tank = Math.max(0, avail - spent);
+  gameState.run.waterTank = pm.tank;      // survives room resets + saves (one tankful per run)
   gameState.moduleState.water.actionsThisSession++;
   renderPipeMaze(gameState);              // tank drains + food updates now; gauges still blue
 
@@ -4734,17 +4252,6 @@ function flyPortPlantsToTray(portIds, done) {
 }
 
 /* --- tooltips -------------------------------------------------------------- */
-function valveTooltip(id) {
-  const pm = gameState.pipeMaze;
-  const open = pm && pm.valves[id] !== false;
-  const ports = valveDownstreamPorts(id).map(p => 'Plant ' + p.slice(1)).join(', ');
-  return [
-    `<span class="tt-name">Valve ${id}</span>`,
-    `<span class="tt-row">${open ? 'OPEN — routing flow' : 'CLOSED — branch blocked'}</span>`,
-    `<span class="tt-row">Feeds: ${ports || '—'}</span>`,
-    `<span class="tt-row hub-unlock-hint">Click to ${open ? 'close' : 'open'}</span>`,
-  ].join('');
-}
 function tankTooltip() {
   const pm = gameState.pipeMaze;
   if (!pm) return null;
@@ -4756,7 +4263,7 @@ function tankTooltip() {
     pct <= 20 ? `<span class="tt-row hub-unlock-hint">Running low!</span>` : '',
   ].join('');
 }
-function dialTooltip(id) {
+function pipeDialTooltip(id) {
   const pm = gameState.pipeMaze;
   const pid = dialPortId(id);
   const pct = pm ? Math.round(pm.dials[id] || 0) : 0;
@@ -4801,6 +4308,9 @@ function exitPipeMaze() {
   // Don't let the player bail mid-Pressurize — the staged beats are still queued
   // (they'd age plants / advance the phase after we'd left). The run is brief.
   if (gameState.pipeMaze && gameState.pipeMaze.phase === 'running') return;
+  // Badges land on return (global rule) — leaving with graded plants still in
+  // the ports would skip their consequences. Return them first.
+  if (gameState.pipeMaze && gameState.pipeMaze.phase === 'resolved') { shakeActionButton(1); flashRoomBanner(); return; }
   setActionZone([]);
   setSlotClickHandler(null);
   clearSlotSelection();
@@ -4809,8 +4319,7 @@ function exitPipeMaze() {
   clearTraySlotLocks();
   clearGaugeFlashes();
 
-  const inPlay = stageInPlay('water', 'watered');
-  const allWatered = inPlay.length > 0 && inPlay.every(p => p.watered);
+  const allWatered = stageRoomComplete('water');
   const acted = gameState.moduleState.water.actionsThisSession > 0;
 
   if (allWatered) markComplete('water');
@@ -5117,6 +4626,15 @@ const FAMILY_PHOTOPERIOD_DEFAULT = {
   'tall-stalk':       'long-day',
   'root-tuber':       'short-day',
 };
+/* Player-facing family rule (the deduction the Light Lab asks for). Named
+   species exceptions stay hidden — that's the discovery. */
+const FAMILY_PHOTOPERIOD_HINT = {
+  'tall-stalk':       'Tall stalks (cereals, sunflowers) usually flower under LONG days (14–18h).',
+  'root-tuber':       'Root & tuber crops usually set under SHORT days (8–11h).',
+  'leafy-rosette':    'Leafy rosettes are usually day-neutral — any day-length flowers them.',
+  'round-fruit-bush': 'Fruit bushes are usually day-neutral — any day-length flowers them.',
+  'climbing-vine':    'Climbing vines are usually day-neutral — any day-length flowers them.',
+};
 /* Effective photoperiod trigger: explicit species value wins, else family
    default. Returns 'short-day' | 'long-day' | 'day-neutral' (never null).
    'day-neutral' has no PHOTO_TARGET window, so it flowers at any dial setting. */
@@ -5135,24 +4653,12 @@ const spectrumPenalty = (plantSpec, zoneSpec) => {
 };
 const labelOf = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
-/* Devtools live size tuning — any LIGHT_SIZES key (spotW/spotH/dial/handle/
-   sprite). renderLightLab re-applies them all to the overlay. */
-function setLightSize(key, v) { LIGHT_SIZES[key] = v; renderLightLab(gameState); }
-/* Devtools per-family sprite nudge (axis = 'dx' | 'dy'). */
-function setLightNudge(family, axis, v) {
-  if (!LIGHT_SPRITE_NUDGE[family]) LIGHT_SPRITE_NUDGE[family] = { dx: 0, dy: 0 };
-  LIGHT_SPRITE_NUDGE[family][axis] = v;
-  renderLightLab(gameState);
-}
 
 /* Spectrum-rail decoration (helps the Blue-top / Red-bottom read inside the
    baked black control box). railStyle: 'none' | 'bands' (3 discrete stops) |
    'gradient' (smooth) | 'dots' (blue top + red bottom). handleTint glows the
-   handle in the current spectrum color. Toggled in Devtools; tuning later. */
-let LIGHT_TUNE = { railStyle: 'gradient', handleTint: false, needlePivot: 0.87 };
-function setLightRailStyle(s) { LIGHT_TUNE.railStyle = s; renderLightLab(gameState); }
-function setLightHandleTint(on) { LIGHT_TUNE.handleTint = !!on; renderLightLab(gameState); }
-function setLightNeedlePivot(pct) { LIGHT_TUNE.needlePivot = pct / 100; renderLightLab(gameState); }
+   handle in the current spectrum color. */
+const LIGHT_TUNE = { railStyle: 'gradient', handleTint: false, needlePivot: 0.87 };
 /* CSS background for the rail strip in each style (Blue top → Red bottom). */
 function railBackground(style) {
   const b = SPECTRUM_RGB['blue-heavy'], w = SPECTRUM_RGB['balanced'], r = SPECTRUM_RGB['red-heavy'];
@@ -5373,8 +4879,7 @@ function updateLightGuide(root) {
     const pl = s.slotIndex != null ? gameState.tray[s.slotIndex] : null; return pl && pl.health > 0;
   }).length;
   const seeding = setup && ll.activeSpot != null && ll.spots[ll.activeSpot].slotIndex == null;
-  const inPlay = stageInPlay('light', 'lit');
-  const allLit = inPlay.length > 0 && inPlay.every(p => p.lit);
+  const allLit = stageRoomComplete('light');
 
   // Soft-lock wrong-stage tray plants (skip ones already lit or on a bench).
   syncTraySlotLocks((p, i) => (p.lit || spotUsesSlot(i)) ? null : stageLockReason('light', p, false));
@@ -5676,7 +5181,7 @@ function photoTooltip(z) {
   return [
     `<span class="tt-name">Day-length — Zone ${z.slice(1)}</span>`,
     tlv('revealed', 'Set to', `${h}h light`),
-    `<span class="tt-row">Triggers flowering — each plant flowers only inside its own hour window.</span>`,
+    `<span class="tt-row">Triggers flowering — each plant flowers only inside its own hour window. Rule of thumb: tall stalks are long-day (14–18h), root crops short-day (8–11h), leafy / fruit / vine crops day-neutral — with a few hidden exceptions.</span>`,
     `<span class="tt-row hub-unlock-hint">Drag: 1–24h</span>`,
   ].join('');
 }
@@ -5687,7 +5192,18 @@ function spotTooltip(id) {
   if (ll.phase === 'setup') {
     if (id === ll.activeSpot && spot.slotIndex == null)
       return `<span class="tt-name">Bench spot</span><span class="tt-row">Click a plant in the tray to place it here.</span>`;
-    return null;   // planted slots show their own tray tooltip
+    const pl = spot.slotIndex != null ? gameState.tray[spot.slotIndex] : null;
+    if (!pl) return null;
+    // Planted: the deduction aids — visible spectrum + the family day-length rule
+    // (a revealed trigger shows its real window instead).
+    const known = pl.revealed.includes('photoperiod') ? PHOTO_TARGET[photoperiodTriggerOf(pl)] : null;
+    return [
+      `<span class="tt-name">${pl.name}</span>`,
+      tlv('light', 'Spectrum', labelOf(pl.lightSpectrum)),
+      known ? tlv('revealed', 'Day-length', known ? `${known.lo}–${known.hi}h` : 'any')
+            : `<span class="tt-row">${FAMILY_PHOTOPERIOD_HINT[pl.spriteFamily]} Some species break the rule.</span>`,
+      `<span class="tt-row hub-unlock-hint">Click ✕ to take back</span>`,
+    ].join('');
   }
   if (!spot.graded) return null;
   const plant = spot.slotIndex != null ? gameState.tray[spot.slotIndex] : null;
@@ -5718,14 +5234,14 @@ function spotTooltip(id) {
 function exitLightLab() {
   const ll = gameState.lightLab;
   if (ll && ll.phase === 'running') return;   // don't bail mid-cycle (beats still queued)
+  if (ll && ll.phase === 'resolved') { shakeActionButton(1); flashLightBanner(); return; }   // return plants first
   setActionZone([]);
   setSlotClickHandler(null);
   clearSlotSelection();
   document.querySelectorAll('#tray .slot').forEach(s => s.classList.remove('light-done', 'light-inzone', 'seed-pulse'));
   clearTraySlotLocks();
 
-  const inPlay = stageInPlay('light', 'lit');
-  const allLit = inPlay.length > 0 && inPlay.every(p => p.lit);
+  const allLit = stageRoomComplete('light');
 
   if (allLit) markComplete('light');
   else        markInProgress('light');
@@ -5814,8 +5330,8 @@ const MIX_SPRITE_NUDGE = {
   'root-tuber':       { dx: 0, dy: 19 },
 };
 
-/* --- balance (Devtools-tunable; baked defaults from the Demo 08 plan) ------ */
-let MIX_TUNE = {
+/* --- balance ---------------------------------------------------------------- */
+const MIX_TUNE = {
   base:    { light: 25, medium: 50, heavy: 75 },  // target magnitude from hunger tier
   vegBoost: 1.3, vegCut: 0.7,                      // vegetative → high N, low P/K
   flowerBoost: 1.3, flowerCut: 0.7,               // flowering+ → high P/K, low N
@@ -5840,6 +5356,14 @@ function nutrientTarget(plant) {
   const cl = v => Math.max(5, Math.min(100, Math.round(v)));
   return { N: cl(N), P: cl(P), K: cl(K) };
 }
+/* The stage rule, in words — the one hidden factor the player must be told.
+   (Hunger tier is on the packet; the stage skew is only taught here.) */
+function mixStageHint(plant) {
+  const st = plant.stage;
+  if (st === 'seed' || st === 'sprout') return 'Seedling — wants a LIGHT dose of everything (about ½ its tier).';
+  if (st === 'vegetative')              return 'Vegetative — wants EXTRA N, LESS P & K.';
+  return 'Flowering/fruiting — wants EXTRA P & K, LESS N.';
+}
 /* Resolve a delivered mix {N,P,K} against a plant's hidden target. Over (burn)
    beats under (deficiency); all-in-band = positive. Returns offending nutrients. */
 function mixOutcome(plant, mix) {
@@ -5854,16 +5378,6 @@ function mixOutcome(plant, mix) {
   return { outcome: 'good', pip: 0, offenders: [] };
 }
 
-/* Devtools setters. */
-function setMixSize(key, v) { MIXING_SIZES[key] = v; renderMixingConsole(gameState); }
-function setMixNeedlePivot(pct) { MIX_TUNE.needlePivot = pct / 100; renderMixingConsole(gameState); }
-function setMixSlots(key, v) { MIXING_SLOTS[key] = v; renderMixingConsole(gameState); }
-function setMixTune(key, v) { MIX_TUNE[key] = v; renderMixingConsole(gameState); }
-function setMixTermTint(pct) { MIX_TUNE.termTint = pct / 100; renderMixingConsole(gameState); }
-function setMixNudge(family, axis, v) {
-  if (!MIX_SPRITE_NUDGE[family]) MIX_SPRITE_NUDGE[family] = { dx: 0, dy: 0 };
-  MIX_SPRITE_NUDGE[family][axis] = v; renderMixingConsole(gameState);
-}
 
 /* --- room state ------------------------------------------------------------ */
 function ensureMixingState() {
@@ -5885,7 +5399,6 @@ function ensureMixingState() {
 /* --- DOM / data helpers ---------------------------------------------------- */
 function mixScreen()        { return document.querySelector('.mix-screen'); }
 function mixSpotEl(id)      { const s = mixScreen(); return s && s.querySelector(`.mix-spot[data-id="${id}"]`); }
-function mixTrayEl(z)       { const s = mixScreen(); return s && s.querySelector(`.mix-tray[data-zone="${z}"]`); }
 function mixZoneOf(id)      { return id.split('_')[0]; }
 function zoneSlotIds(z)     { return [0, 1, 2].map(i => `${z}_${i}`); }
 function mixSpotPoint(id)   { const [z, i] = id.split('_'); return quadSlots(MIXING_TRAYS[z], [0.5 - MIXING_SLOTS.spread, 0.5, 0.5 + MIXING_SLOTS.spread], MIXING_SLOTS.v)[+i]; }
@@ -6398,7 +5911,8 @@ function dialTooltip(z, nu) {
     `<span class="tt-name">${MIX_NUT_NAME[nu]} (${nu}) — Tray ${z.slice(1)}</span>`,
     tlv('nutrient', 'Dose', `${v}`),
     `<span class="tt-row">${MIX_NUT_ROLE[nu]}</span>`,
-    `<span class="tt-row hub-unlock-hint">Drag: 0–100. Exact need is hidden — read the plant’s hunger.</span>`,
+    `<span class="tt-row">Dose ≈ hunger tier (light 25 · medium 50 · heavy 75), then skewed by growth stage: seedlings take about half, vegetative plants want more N, flowering plants want more P & K.</span>`,
+    `<span class="tt-row hub-unlock-hint">Drag: 0–100. The exact need stays hidden.</span>`,
   ].join('');
 }
 function zoneTooltip(z) {
@@ -6422,7 +5936,10 @@ function spotMixTooltip(id) {
   if (mc.phase === 'setup') {
     if (spot.slotIndex == null) return null;
     const pl = gameState.tray[spot.slotIndex];
-    return pl ? `<span class="tt-name">${pl.name}</span><span class="tt-row hub-unlock-hint">Click to take back to the tray</span>` : null;
+    return pl ? `<span class="tt-name">${pl.name}</span>` +
+                tlv('nutrient', 'Hunger', labelOf(pl.nutrientHunger)) +
+                `<span class="tt-row">${mixStageHint(pl)}</span>` +
+                `<span class="tt-row hub-unlock-hint">Click to take back to the tray</span>` : null;
   }
   if (!spot.graded) return null;
   const plant = spot.slotIndex != null ? gameState.tray[spot.slotIndex] : null;
@@ -6449,6 +5966,7 @@ function spotMixTooltip(id) {
 function exitMixingConsole() {
   const mc = gameState.mixingConsole;
   if (mc && mc.phase === 'running') return;   // don't bail mid-feed (beats still queued)
+  if (mc && mc.phase === 'resolved') { shakeActionButton(1); flashMixBanner(); return; }   // return plants first
   setActionZone([]);
   setSlotClickHandler(null);
   clearSlotSelection();
@@ -6537,8 +6055,6 @@ const ORIENT_RESPONSE_DESC = {
   indifferent: 'Indifferent — grows fine in any orientation.',
 };
 
-/* Devtools setters. */
-function setOrientSize(key, v) { ORIENT_SIZES[key] = v; renderOrientationChamber(gameState); }
 
 /* --- room state ------------------------------------------------------------ */
 function ensureOrientationState() {
@@ -6986,6 +6502,7 @@ function orientButtonTooltip(t) {
 function exitOrientationChamber() {
   const oc = gameState.orientationChamber;
   if (oc && oc.phase === 'running') return;   // don't bail mid-confirm (beats queued)
+  if (oc && oc.phase === 'resolved') { shakeActionButton(1); flashOrientBanner(); return; }   // return plants first
   setActionZone([]);
   setSlotClickHandler(null);
   clearSlotSelection();
@@ -7057,7 +6574,7 @@ const HYDRO_ALL_POTS  = ['back0', 'back1', 'back2', 'back3', 'front0', 'front1',
 const HYDRO_METER_KEYS = ['backPh', 'backEc', 'frontPh', 'frontEc'];
 const HYDRO_BTN_KEYS   = ['backUp', 'backDown', 'backNut', 'frontUp', 'frontDown', 'frontNut'];
 
-/* Per-family sprite seat inside the pot (baked here; tuned live via Devtools). */
+/* Per-family sprite seat inside the pot. */
 const HYDRO_SPRITE_NUDGE = {
   'leafy-rosette':    { dx:  2, dy: 35 },
   'root-tuber':       { dx:  0, dy: 18 },
@@ -7065,19 +6582,13 @@ const HYDRO_SPRITE_NUDGE = {
   'climbing-vine':    { dx: 13, dy:  5 },
   'round-fruit-bush': { dx:  7, dy: 11 },
 };
-/* Live-tunable knobs. startPh/startEc = the solution each channel begins at;
+/* Knobs. startPh/startEc = the solution each channel begins at;
    phStep/ecStep = per-press increment (lag hides where it lands → overshoot). */
 const HYDRO_TUNE = { startPh: 7.0, startEc: 1.0, phStep: 0.3, ecStep: 0.25,
                      hzW: 79, hzH: 157, hzDx: -11, hzDy: -5,   // meter hover-zone size + offset from the bar-rect center
                      ttMaxW: 320 };                            // tooltip box width while in this room (the pH/EC explainers are wordy)
 const HYDRO_FX_DY = 60;                          // panel→stage offset for particleBurst (top bar)
 
-function setHydroSize(key, v)  { HYDRO_SIZES[key] = v; renderHydroponicBay(gameState); }
-function setHydroNudge(family, axis, v) {
-  if (!HYDRO_SPRITE_NUDGE[family]) HYDRO_SPRITE_NUDGE[family] = { dx: 0, dy: 0 };
-  HYDRO_SPRITE_NUDGE[family][axis] = v; renderHydroponicBay(gameState);
-}
-function setHydroTune(key, v)  { HYDRO_TUNE[key] = v; renderHydroponicBay(gameState); }
 
 /* --- helpers --------------------------------------------------------------- */
 function hydroScreen()       { return document.querySelector('.hydro-screen'); }
@@ -7586,6 +7097,7 @@ function hydroButtonTooltip(b) {
 function exitHydroponicBay() {
   const hb = gameState.hydroponicBay;
   if (hb && hb.phase === 'running') return;   // don't bail mid-resolve (beats queued)
+  if (hb && hb.phase === 'resolved') { shakeActionButton(1); flashHydroBanner(); return; }   // return plants first
   document.documentElement.style.removeProperty('--tt-max-width');   // restore the default tooltip width for other rooms
   setActionZone([]);
   setSlotClickHandler(null);
@@ -7687,7 +7199,6 @@ const RAD_TYPES = {
 const RAD_BAY_KEYS = [0, 1, 2, 3];
 const RAD_FX_DY = 60;                             // panel→stage offset for particleBurst (top bar)
 
-/* Live-tunable knobs (Devtools). */
 const RAD_TUNE = { ttMaxW: 320 };
 
 /* --- geometry helpers ------------------------------------------------------ */
@@ -8328,6 +7839,7 @@ function radRackTooltip(mk) {
 function exitRadiationDome() {
   const rd = gameState.radiationDome;
   if (rd && rd.phase === 'running') return;   // don't bail mid-resolve
+  if (rd && rd.phase === 'resolved') { shakeActionButton(1); flashRadBanner(); return; }   // return plants first
   document.documentElement.style.removeProperty('--tt-max-width');
   setActionZone([]);
   setSlotClickHandler(null);
@@ -8471,7 +7983,6 @@ const POLL_BEE = {
 const POLL_FAN_ZONE = [[126,134], [385,173], [638,185], [931,171], [1160,126], [1158,235], [930,248], [634,250], [342,244], [124,232]];
 const POLL_SIZES = { plant: 88, ringR: 15, beeW: 46, fanW: 72, fanRange: 190 };
 
-/* Live-tunable knobs (Devtools — keep demo slider defaults synced). */
 const POLL_TUNE = {
   selfSec: 25, insectSec: 45, windSec: 35,   // ring duration per pollination type
   jitterSec: 3,                              // ± deterministic per-spot stagger
@@ -8546,7 +8057,16 @@ function pollDurFor(plant, i) {
 
 /* --- build ------------------------------------------------------------------ */
 function buildPollinationDome(key) {
-  ensurePollState();
+  const pd = ensurePollState();
+  // A preserved session may be stale: new flowerers since the last visit need a
+  // spot, and a plant that died elsewhere can't be clicked home. In setup the
+  // bench simply re-populates; in resolved, dead spots are dropped (and an
+  // emptied bench closes the session).
+  if (pd.phase === 'setup') pollPopulateBench();
+  else if (pd.phase === 'resolved') {
+    pollSpotKeys().forEach(i => { const p = gameState.tray[i]; if (!p || p.health <= 0) delete pd.spots[i]; });
+    if (pollSpotKeys().length === 0) { pd.phase = 'setup'; pd.counts = null; pollResetTools(pd); pollPopulateBench(); }
+  }
   document.documentElement.style.setProperty('--tt-max-width', POLL_TUNE.ttMaxW + 'px');
 
   const wrap = document.createElement('div');
@@ -9469,7 +8989,7 @@ const HARV_METER  = { points: [[84, 150], [136, 153], [133, 421], [84, 427]], ti
 const HARV_SCREEN = { x: 1010, y: 125, w: 219, h: 176 };
 const HARV_SIZES  = { produce: 44, arcPeak: 60 };
 
-/* --- tuning (Devtools live-tunable; keep demo slider defaults in sync) ------ */
+/* --- tuning ------------------------------------------------------------------ */
 const HARV_TUNE = {
   baseYield: 10,        // per-plant base units (flat across families)
   unitsPerProduce: 2,   // units each falling sprite carries (last = remainder)
@@ -9576,7 +9096,10 @@ function harvRunOver() {
   // player can still take them to the dome.)
   const allSpent = planted.length > 0 &&
     planted.every(p => p.health <= 0 || p.stage === 'harvested' || p.missedPollination);
-  return allSpent || run.colonyFood <= 0;
+  // Starvation only counts when nothing ripe is waiting: a tray of fruiting
+  // plants at 0 food is one free Harvest away from recovery, not a loss.
+  const starved = run.colonyFood <= 0 && harvHarvestable().length === 0;
+  return allSpent || starved;
 }
 
 /* --- state ------------------------------------------------------------------- */
@@ -9975,8 +9498,8 @@ function harvResolve() {
    modal (z1000) opens ABOVE this modal (z900) from the actions row.
    ============================================================================ */
 
-/* Per-cause science one-liners. Kinds match stressMarkers; the two pseudo-
-   kinds (photoperiod-miss / unpollinated) are derived from plant flags. */
+/* Per-cause science one-liners. Kinds match stressMarkers; the pseudo-kind
+   photoperiod-miss is derived from the plant's lightYieldReduced flag. */
 const HARV_TAKEAWAYS = {
   'flood':           { icon: 'badge-flood',              line: '<b>Overwatering drowns roots.</b> Roots need air as much as water — soggy substrate suffocates them.' },
   'drought':         { icon: 'badge-drought',            line: '<b>Water is the delivery truck.</b> Too little and nutrients can\'t move — the plant wilts even in rich soil.' },
@@ -9989,7 +9512,6 @@ const HARV_TAKEAWAYS = {
   'dna-damage':      { icon: 'badge-dna-damage',         line: '<b>Radiation shreds DNA.</b> And plain water is a surprisingly good shield — real Mars habitat designs put water tanks overhead.' },
   'missed-pollination': { icon: 'death-missed-pollination', line: '<b>No pollination, no fruit.</b> Flowers aren\'t decoration — they\'re a job posting for pollen carriers.' },
   'photoperiod-miss':{ icon: 'death-wrong-spectrum',     line: '<b>Day length is a calendar.</b> Many plants count hours of light to decide when to flower — miss it and yield drops.' },
-  'unpollinated':    { icon: 'trait-pollination-self',   line: '<b>Half a harvest.</b> Flowers that never met the Pollination Dome set far less fruit — even self-pollinators do better with help.' },
 };
 
 /* Real-world space-agriculture hooks (COLONY tab; deterministic pick). */
@@ -10017,9 +9539,8 @@ function hsFailureData() {
     const stillInSlot = cur && cur.health <= 0 && cur.speciesId === e.plant.speciesId;
     if (!stillInSlot) tally(e.plant);
   });
-  // Pseudo-kinds from flags (no stress marker exists for these).
+  // Pseudo-kind from a flag (no stress marker exists for it).
   if (planted.some(p => p.lightYieldReduced)) kinds.add('photoperiod-miss');
-  if (planted.some(p => p.stage === 'harvested' && !p.pollinated && !p.missedPollination)) kinds.add('unpollinated');
   return { counts, kinds, planted };
 }
 
@@ -10152,17 +9673,7 @@ function hsBuildColony(body) {
 }
 
 /* — PLANTS tab — */
-/* Card sprite size is live-tunable (Devtools): applyPlantSpriteCell bakes
-   inline px, so the setter re-renders the tab if it's the one on screen. */
-let _hsCardSprite = 85;   // user-baked 2026-07-17 — integer-perfect (85×85 native cells)
-function setHsCardSpriteSize(v) {
-  _hsCardSprite = v;
-  const body = document.querySelector('.harv-summary-modal .hs-body');
-  if (body && body.querySelector('.hs-cards')) {
-    body.innerHTML = '';
-    hsBuildPlants(body);
-  }
-}
+const _hsCardSprite = 85;   // integer-perfect (85×85 native cells)
 
 function hsBuildPlants(body) {
   const wrap = document.createElement('div');
@@ -10252,8 +9763,10 @@ function harvDrawCanvas(wrap) {
   const hb = gameState.harvestBay;
   const [, , BR, BL] = HARV_METER.points;
 
-  // Fill polygon: bottom edge up to the (tilted) level line. Gauge maps 0–100.
-  const frac = Math.max(0, Math.min(1, (hb ? hb.displayFood : gameState.run.colonyFood) / 100));
+  // Fill polygon: bottom edge up to the (tilted) level line. Gauge maps 0–quota
+  // (the quota mark sits at the top band).
+  const gaugeMax = Math.max(100, gameState.run.colonyQuota);
+  const frac = Math.max(0, Math.min(1, (hb ? hb.displayFood : gameState.run.colonyFood) / gaugeMax));
   if (frac > 0) {
     const { L, R } = harvMeterLevel(frac);
     ctx.beginPath();
@@ -10271,7 +9784,7 @@ function harvDrawCanvas(wrap) {
     ctx.stroke();
   }
   // Quota marker (amber dashes) — where "colony fed" sits on the gauge.
-  const qf = Math.min(1, gameState.run.colonyQuota / 100);
+  const qf = Math.min(1, gameState.run.colonyQuota / gaugeMax);
   const q = harvMeterLevel(qf);
   ctx.beginPath();
   ctx.setLineDash([4, 3]);
@@ -10312,7 +9825,9 @@ const PREFS_KEY    = 'starseed-station-prefs';   // survives New Run (difficulty
 const SAVE_VERSION = 1;
 
 /* Transient per-visit room benches — never persisted; a resume always starts
-   at the hub (mid-room state is discarded, matching the autosave-at-hub rule). */
+   at the hub. The game autosaves at every state change (food, aging, badges,
+   deaths, unlocks) as well as on hub arrival, so a reload never undoes an
+   outcome; only the in-room bench layout is lost. */
 const TRANSIENT_KEYS = ['substrateLab', 'pipeMaze', 'lightLab', 'mixingConsole',
   'orientationChamber', 'hydroponicBay', 'radiationDome', 'pollinationDome', 'harvestBay'];
 
@@ -10322,32 +9837,28 @@ const TRANSIENT_KEYS = ['substrateLab', 'pipeMaze', 'lightLab', 'mixingConsole',
    the rack (strict gravitropes / strict photoperiod / heavy-slow growers) and
    nobody but Specialist ever sees the Radiation Dome. */
 const DIFFICULTY = {
-  // Balance (content pass step 3, 2026-07-19 — tuned against sim-econ.js ground
-  // truth over perfect/good/typical/sloppy player profiles; baseYield stays
-  // LOCKED per user, so start-food + quota are the only levers):
-  //  · cadet 95/100 — even a sloppy run (2 dead, 2 missed poll) still clears
-  //    (101); only a near-total wipe loses → training-wheels tier. Start stays
-  //    BELOW quota on purpose: start == quota would make maybeEndRun's win-guard
-  //    (food >= quota) treat a fresh run as already-won and suppress the lose
-  //    summary when all plants die.
-  //  · commander 80/100 — reference: typical play wins tight (+10), sloppy loses.
-  //  · specialist 60/115 — a GOOD run (67 yield) wins +5, typical (38) loses;
-  //    hard but off the razor's edge (was 120 = exactly 0 margin for a good run,
-  //    made harsher once step 2 zeroed missed-pollination yield).
+  // Start food must stay BELOW quota: start == quota would make maybeEndRun's
+  // win-guard (food >= quota) treat a fresh run as already won.
+  // Quota pass 2026-10-24: the run ends the moment quota is met, so the quota
+  // must sit far enough above start food that a single early harvest can't end
+  // the game (cadet used to finish after ONE plant). Max yield is 80 (8 × 10).
+  //  · cadet 95/130 — needs ~45 yield after ~8 actions: about five healthy plants.
+  //  · commander 80/110 — needs ~40 yield: a typical full run wins, a sloppy one loses.
+  //  · specialist 60/120 — needs ~70 of the 80 possible: near-flawless husbandry.
   cadet: {
     label: 'CADET', sub: 'first posting', rgb: '0, 255, 136',
-    food: 95, quota: 100, lockedSpecies: [9, 13, 16, 18], radiation: false,
-    lines: ['Start 95 food', 'Limited seeds'],
+    food: 95, quota: 130, lockedSpecies: [9, 13, 16, 18], radiation: false,
+    lines: ['Start 95 food', 'Quota 130', 'Limited seeds'],
   },
   commander: {
     label: 'COMMANDER', sub: 'the standard run', rgb: '255, 204, 0',
-    food: 80, quota: 100, lockedSpecies: [], radiation: false,
-    lines: ['Start 80 food', 'All seeds available'],
+    food: 80, quota: 110, lockedSpecies: [], radiation: false,
+    lines: ['Start 80 food', 'Quota 110', 'All seeds available'],
   },
   specialist: {
     label: 'SPECIALIST', sub: 'deep-space posting', rgb: '255, 68, 85',
-    food: 60, quota: 115, lockedSpecies: [], radiation: true,
-    lines: ['Start 60 food', 'Higher quota', 'Radiation Dome online'],
+    food: 60, quota: 120, lockedSpecies: [], radiation: true,
+    lines: ['Start 60 food', 'Quota 120', 'Radiation Dome online'],
   },
 };
 
@@ -10397,8 +9908,6 @@ function onStageAdvanced(plant, from, to) {
   // Harvest Bay and the hub center pulses green until visited (Bible §5). The
   // vestigial 'harvestable' stage still qualifies defensively.
   if (to === 'fruiting' || to === 'harvestable') {
-    const hr = gameState.centerRoom.harvestReady;
-    if (!hr.includes(plant.slotIndex)) hr.push(plant.slotIndex);
     if (gameState.centerRoom.mode !== 'harvest') setCenterMode('harvest');
   }
 }
@@ -10424,7 +9933,6 @@ function saveState() {
       run:        Object.assign({}, s.run),
       tray:       s.tray,
       deadTray:   s.deadTray,
-      autopsyLog: s.autopsyLog,
       moduleState,
       centerRoom: Object.assign({}, s.centerRoom),
       seedBank: {
@@ -10450,7 +9958,6 @@ function loadState() {
   Object.assign(gameState.run, snap.run);
   gameState.tray       = snap.tray       || [null, null, null, null, null, null, null, null];
   gameState.deadTray   = snap.deadTray   || [];
-  gameState.autopsyLog = snap.autopsyLog || [];
   Object.keys(snap.moduleState || {}).forEach(k => {
     if (gameState.moduleState[k]) Object.assign(gameState.moduleState[k], snap.moduleState[k]);
   });
@@ -10493,6 +10000,7 @@ function refreshAllSurfaces() {
    removes any room screen-layer + the run-summary modal, un-slides the hub. */
 function resetStageToHub() {
   hideTooltip();
+  document.documentElement.style.removeProperty('--tt-max-width');   // a run can end inside a wide-tooltip room
   const modal = document.querySelector('.harv-summary-modal');
   if (modal) modal.remove();
   closeAutopsyReview();
@@ -10653,7 +10161,7 @@ const TUTORIALS = {
     { shapes: [], box: { x: 474, y: 231 },
       text: '<b>WELCOME TO STARSEED STATION.</b><br>The colony is counting on you: raise 8 crop plants through the station\'s science rooms and harvest enough food to hit quota.' },
     { shapes: [{ el: '.tb-food' }],
-      text: '<b>COLONY FOOD</b> is your budget AND your goal. Every room action costs 1 food. Reach the quota to win — if food hits 0 first, the colony starves.' },
+      text: '<b>COLONY FOOD</b> is your budget AND your goal. Every room action costs 1 food. Reach the quota to win — if food hits 0 with nothing ripe to harvest, the colony starves.' },
     { shapes: [{ el: '#tray' }],
       text: 'Your plants ride here in <b>THE TRAY</b> — on every screen, always. Green pips are health; badges appear as you discover each plant\'s hidden traits.' },
     { shapes: [{ rect: { x: 495, y: 216, w: 288, h: 220 } }],
@@ -10700,7 +10208,7 @@ const TUTORIALS = {
     { shapes: [{ circle: { cx: 347, cy: 199, r: 36 } }, { circle: { cx: 766, cy: 199, r: 36 } },
                { circle: { cx: 1185, cy: 199, r: 36 } }],
       box: { x: 450, y: 300 }, line: false,
-      text: 'The <b>24-HOUR DIAL</b> sets each zone\'s day-length. Some plants only flower at the right hours — and that trigger stays hidden until you find it.' },
+      text: 'The <b>24-HOUR DIAL</b> sets each zone\'s day-length. Some plants only flower at the right hours: tall stalks like long days, root crops short days, most others don\'t care. Hover a placed plant for its family\'s rule — a few species break it.' },
     { shapes: [{ el: '.action-zone' }],
       text: '<b>RUN LIGHT CYCLE</b>: 1 food, and participating plants grow a stage.' },
   ],
@@ -10710,7 +10218,7 @@ const TUTORIALS = {
     { shapes: [{ rect: { x: 230, y: 422, w: 214, h: 70 } }, { rect: { x: 524, y: 422, w: 218, h: 70 } },
                { rect: { x: 824, y: 422, w: 216, h: 70 } }],
       box: { x: 480, y: 200 }, line: false,
-      text: 'Each feeding zone mixes ONE recipe with its three <b>N-P-K DIALS</b>. Group plants with similar <b>APPETITE</b> into a zone, then dial its mix — underfeeding causes deficiency; overfeeding BURNS roots.' },
+      text: 'Each feeding zone mixes ONE recipe with its three <b>N-P-K DIALS</b>. Group plants with similar <b>APPETITE</b> and <b>GROWTH STAGE</b> into a zone — seedlings want a light dose, vegetative plants extra N, flowering plants extra P-K. Underfeeding causes deficiency; overfeeding BURNS roots.' },
     { shapes: [{ el: '.action-zone' }], box: { x: 731, y: 531 },
       text: '<b>FEED</b> delivers the batch. This is a boost room — it costs 1 food, but plants do NOT age here.' },
   ],

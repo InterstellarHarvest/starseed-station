@@ -44,15 +44,26 @@ card explaining the science behind what went wrong.
 
 ## Difficulty
 
-- **Cadet** — training wheels: extra starting food, a limited seed selection.
-- **Commander** — the standard run.
-- **Specialist** — deep-space posting: tight food, higher quota, Radiation Dome online.
+- **Cadet** — training wheels: 95 food to start, quota 130, a limited seed selection.
+- **Commander** — the standard run: 80 food, quota 110.
+- **Specialist** — deep-space posting: 60 food, quota 120, Radiation Dome online.
 
 ## Tech
 
 Single-page and DOM-rendered (canvas is used only for particles, gauge needles, and liquid
 fills). One shared stylesheet and one shared script; sprites are pixel-art PNGs tinted per
-species with CSS filters. Desktop / mouse, on a 1280×720 stage.
+species with CSS filters. Desktop / mouse. The 1280×720 stage scales to fill the window.
+
+## Tests
+
+`tests/smoke.js` is a headless Playwright run: static checks (no duplicate function names,
+every sprite path exists), fit-to-window at three sizes, then a full scripted run through
+every growth room to the run summary.
+
+```bash
+npm i -g playwright && npx playwright install chromium   # once
+NODE_PATH="$(npm root -g)" node tests/smoke.js
+```
 
 ---
 
