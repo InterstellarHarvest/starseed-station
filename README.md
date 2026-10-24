@@ -19,11 +19,7 @@ built on a real growing concept, and every plant hides traits you can only uncov
 experimenting. Get it right and the colony eats. Get it wrong and the autopsy card tells you
 exactly why.
 
-Starseed Station is a browser-based science game in the spirit of
-*The Logical Journey of the Zoombinis*: no lectures, no quizzes, just rooms that teach by
-letting you try things.
-
-## Pick your crew
+## Pick your plants
 
 <img src="docs/screenshots/02-seed-bank.png" width="640" alt="The Seed Bank">
 
