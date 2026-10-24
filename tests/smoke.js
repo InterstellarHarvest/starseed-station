@@ -161,6 +161,32 @@ ok(missing.length === 0, 'every ASSETS path exists on disk' + (missing.length ? 
   ok(await ev(() => JSON.parse(localStorage.getItem('starseed-station-save')).run.colonyFood === gameState.run.colonyFood), 'save: food autosaved after harvest');
   await page.close();
 
+  // --- reload mid-action: the bench, verdict and aging must survive -----------
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+    const pg = await ctx.newPage(); hook(pg);
+    await pg.goto(url); await pg.waitForTimeout(400);
+    await pg.evaluate(() => {
+      startNewRun('commander'); gameState.run.tutorialSkipAll = true; document.querySelector('.startup-layer').remove();
+      [2, 1, 8, 10, 5, 6, 7, 4].forEach((id, i) => { gameState.tray[i] = createPlant(id, i); gameState.tray[i].stage = 'sprout'; gameState.tray[i].actionAge = 1; });
+      gameState.run.seedBankSelectionComplete = true; unlockRoom('water', { animate: false });
+      transitionTo('room:water', 'up-right');
+    });
+    await pg.waitForTimeout(400);
+    // Dial 0 on a medium-water plant = a far miss (drought, −1) — then reload mid-beat.
+    await pg.evaluate(() => { pipePortClick('P1'); pipeTraySeedClick(3); ['D1', 'D2', 'D3', 'D4'].forEach(d => { gameState.pipeMaze.dials[d] = 0; }); gameState.pipeMaze.dials.D1 = 1; pressurize(); });
+    await pg.waitForTimeout(80);
+    await pg.reload(); await pg.waitForTimeout(500);
+    await pg.click('.startup-btn.primary'); await pg.waitForTimeout(1200);
+    const resumed = await pg.evaluate(() => ({ phase: gameState.pipeMaze && gameState.pipeMaze.phase, stage: gameState.tray[3].stage }));
+    ok(resumed.phase === 'resolved' && resumed.stage === 'vegetative', 'reload mid-Pressurize: resumes in resolved with the plant aged');
+    await pg.evaluate(() => transitionTo('room:water', 'up-right')); await pg.waitForTimeout(400);
+    await pg.evaluate(() => returnWateredPlant('P1')); await pg.waitForTimeout(600);
+    const after = await pg.evaluate(() => ({ health: gameState.tray[3].health, drought: gameState.tray[3].badges.some(b => b.kind === 'drought') }));
+    ok(after.health === 4 && after.drought, 'reload mid-Pressurize: the drought penalty still lands on click-home');
+    await ctx.close();
+  }
+
   ok(errs.length === 0, 'no page errors / failed requests' + (errs.length ? '\n    ' + errs.join('\n    ') : ''));
   await browser.close();
   console.log(failures ? `\n${failures} FAILED` : '\nALL PASSED');

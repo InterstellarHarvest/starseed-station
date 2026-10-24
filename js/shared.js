@@ -1719,7 +1719,7 @@ const UNLOCK_HINTS = {
   orientation: 'Unlocks after Substrate Lab completed once.',
   nutrients:   'Unlocks after Light Lab first visited.',
   hydroponics: 'Unlocks when a plant is assigned Agar Gel AND a gravity response is revealed.',
-  radiation:   'Scenario-dependent — not unlocked in the default run.',
+  radiation:   'Specialist posting only — comes online after your first room action.',
   pollination: 'Unlocks when a plant reaches Flowering stage.',
 };
 
@@ -1862,7 +1862,9 @@ function hubRoomTooltipContent(key, state) {
   if (key === 'center') {
     body = state.centerRoom.mode === 'harvest'
       ? `<span class="tt-row"><span class="tt-label tt-cat-pollination">Harvest ready</span><span class="tt-value">collect produce</span></span>`
-      : `<span class="tt-row"><span class="tt-label tt-cat-substrate">Seed Bank</span><span class="tt-value">pick starting plants</span></span>`;
+      : state.run.seedBankSelectionComplete
+        ? `<span class="tt-row"><span class="tt-label tt-cat-substrate">Seed Bank</span><span class="tt-value">browse the rack</span></span>`
+        : `<span class="tt-row"><span class="tt-label tt-cat-substrate">Seed Bank</span><span class="tt-value">pick starting plants</span></span>`;
   } else if (status === 'locked') {
     const hint = UNLOCK_HINTS[key] || 'Unlock condition not specified.';
     body = `<span class="tt-row"><span class="tt-label tt-cat-cause">Locked</span></span>` +
@@ -3854,7 +3856,7 @@ function renderPipeMaze(state, screenEl) {
     const pid = 'P' + gid.slice(1);                     // G1↔P1 …
     const port = pm.ports[pid];
     const plant = port && port.slotIndex != null ? state.tray[port.slotIndex] : null;
-    if (port && port.grade) {
+    if (port && port.grade && (pm.phase !== 'running' || pm.revealed)) {
       renderGauge(el, port.lastFill, port.grade);       // resolved: green/yellow/red
     } else {
       const did = portDialId(pid);                      // always mirror the dial (empty ports too)
@@ -4169,6 +4171,7 @@ function pressurize() {
   const plantPorts = ports.filter(isPlant);
   if (plantPorts.length === 0) { shakeActionButton(); flashRoomBanner(); return; }  // need ≥1 plant
   pm.phase = 'running';   // lock placement/dials/re-press during the animation
+  pm.revealed = false;    // gauges stay blue until the water arrives (beat 1)
 
   // Limited reservoir: EVERY port with a dial > 0 draws water — including empty
   // ones, whose water sprays out the open pipe (wasted). Scale down if short.
@@ -4187,8 +4190,7 @@ function pressurize() {
     const g = pipeGrade(gameState.tray[pm.ports[pid].slotIndex], d);
     pm.ports[pid].lastFill = d;
     pm.ports[pid].outcome  = g.outcome;
-    pm.ports[pid]._pending = g.grade;     // gauge color held back until the reveal beat
-    pm.ports[pid].grade    = null;
+    pm.ports[pid].grade    = g.grade;     // final now; the gauge shows it once pm.revealed flips (beat 1)
   });
   deductFood(1);
   pm.tank = Math.max(0, avail - spent);
@@ -4201,7 +4203,7 @@ function pressurize() {
 
   // Beat 1 — water arrives: plant gauges reveal their grade; empty pipes spray.
   setTimeout(() => {
-    plantPorts.forEach(pid => { pm.ports[pid].grade = pm.ports[pid]._pending; delete pm.ports[pid]._pending; });
+    pm.revealed = true;
     renderPipeMaze(gameState);
     plantPorts.forEach(pid => {
       const g = gaugeEl('G' + pid.slice(1));
@@ -5060,60 +5062,64 @@ function runCycle() {
   if (placedIds.length === 0) { shakeActionButton(); flashLightBanner(); return; }   // need ≥1 plant
 
   ll.phase = 'running';
-  deductFood(1);
-  gameState.moduleState.light.actionsThisSession++;
 
   const wrap = lightScreen();
   if (wrap) wrap.querySelectorAll('.light-zone').forEach(el => el.classList.add('glow'));   // lights on
   renderLightLab(gameState);
 
-  // Beat 1 — resolve spectrum + photoperiod; reveal/bloom/stress; flash spots.
-  setTimeout(() => {
-    placedIds.forEach(id => {
-      const z = spotZoneOf(id);
-      const spot = ll.spots[id];
-      const plant = gameState.tray[spot.slotIndex];
-      if (!plant || plant.health <= 0) return;
+  // Grade every placed plant NOW (state is final the instant the cycle starts —
+  // a reload mid-beat can resume cleanly); the beats below only paint it.
+  placedIds.forEach(id => {
+    const z = spotZoneOf(id);
+    const spot = ll.spots[id];
+    const plant = gameState.tray[spot.slotIndex];
+    if (!plant || plant.health <= 0) return;
 
-      const spec = zoneSpectrum(z);
-      const specPip = spectrumPenalty(plant.lightSpectrum, spec);        // 0 ok / 1 balanced-involved / 2 opposite
-      const specOk = specPip === 0;
+    const spec = zoneSpectrum(z);
+    const specPip = spectrumPenalty(plant.lightSpectrum, spec);        // 0 ok / 1 balanced-involved / 2 opposite
+    const specOk = specPip === 0;
 
-      const truePhoto = photoperiodTriggerOf(plant);                     // truth (hidden; null species resolve via family default)
-      const triggered = truePhoto === 'short-day' || truePhoto === 'long-day';
-      // photoState: 'none' (untriggered) | 'bloom' (in window) | 'near' (≤grace
-      // outside: no flower, no pip) | 'miss' (further out: no flower, −1 pip).
-      let photoState = 'none';
-      if (triggered) {
-        const dist = photoDistance(zoneHours(z), truePhoto);
-        photoState = dist === 0 ? 'bloom' : dist <= PHOTO_GRACE ? 'near' : 'miss';
-      }
+    const truePhoto = photoperiodTriggerOf(plant);                     // truth (hidden; null species resolve via family default)
+    const triggered = truePhoto === 'short-day' || truePhoto === 'long-day';
+    // photoState: 'none' (untriggered) | 'bloom' (in window) | 'near' (≤grace
+    // outside: no flower, no pip) | 'miss' (further out: no flower, −1 pip).
+    let photoState = 'none';
+    if (triggered) {
+      const dist = photoDistance(zoneHours(z), truePhoto);
+      photoState = dist === 0 ? 'bloom' : dist <= PHOTO_GRACE ? 'near' : 'miss';
+    }
 
-      // Pipe-Maze style: the verdict is shown now (flash/bloom/tooltip), but the
-      // trait reveal, badges/pips and yield flag are APPLIED when the plant is
-      // returned to the tray (returnLitPlant) — stashed on the spot until then.
-      spot.pendingReveal = 'photoperiod';   // a cycle teaches the trait (incl. "it's day-neutral")
-      spot.pendingMarkers = [];
-      spot.pendingYield = (photoState === 'near' || photoState === 'miss');
-      if (!specOk) spot.pendingMarkers.push({
-        kind: 'wrong-spectrum', pipCost: specPip, deathCause: 'wrong-spectrum',
-        detail: `Lit ${labelOf(spec)} — wants ${labelOf(plant.lightSpectrum)} (−${specPip}).`,
-      });
-      if (photoState === 'miss') {
-        const w = PHOTO_TARGET[truePhoto];
-        spot.pendingMarkers.push({                                       // reuse the light-failure badge (covers spectrum OR day-length)
-          kind: 'wrong-spectrum', pipCost: 1, deathCause: 'wrong-spectrum',
-          detail: `${zoneHours(z)}h light — a ${truePhoto} plant wants ${w.lo}–${w.hi}h. No flower, −1.`,
-        });
-      }
-
-      spot.graded = true;
-      spot.specOutcome  = specOk ? 'content' : 'stress';
-      spot.photoOutcome = photoState;                                    // 'none'|'bloom'|'near'|'miss'
-      spot.flash = (!specOk || photoState === 'miss') ? 'far'            // any pip loss → red
-                 : photoState === 'near' ? 'near'                        // no-pip near-miss → amber
-                 : 'ok';                                                 // all good → green
+    // Pipe-Maze style: the verdict is shown now (flash/bloom/tooltip), but the
+    // trait reveal, badges/pips and yield flag are APPLIED when the plant is
+    // returned to the tray (returnLitPlant) — stashed on the spot until then.
+    spot.pendingReveal = 'photoperiod';   // a cycle teaches the trait (incl. "it's day-neutral")
+    spot.pendingMarkers = [];
+    spot.pendingYield = (photoState === 'near' || photoState === 'miss');
+    if (!specOk) spot.pendingMarkers.push({
+      kind: 'wrong-spectrum', pipCost: specPip, deathCause: 'wrong-spectrum',
+      detail: `Lit ${labelOf(spec)} — wants ${labelOf(plant.lightSpectrum)} (−${specPip}).`,
     });
+    if (photoState === 'miss') {
+      const w = PHOTO_TARGET[truePhoto];
+      spot.pendingMarkers.push({                                       // reuse the light-failure badge (covers spectrum OR day-length)
+        kind: 'wrong-spectrum', pipCost: 1, deathCause: 'wrong-spectrum',
+        detail: `${zoneHours(z)}h light — a ${truePhoto} plant wants ${w.lo}–${w.hi}h. No flower, −1.`,
+      });
+    }
+
+    spot.graded = true;
+    spot.specOutcome  = specOk ? 'content' : 'stress';
+    spot.photoOutcome = photoState;                                    // 'none'|'bloom'|'near'|'miss'
+    spot.flash = (!specOk || photoState === 'miss') ? 'far'            // any pip loss → red
+               : photoState === 'near' ? 'near'                        // no-pip near-miss → amber
+               : 'ok';                                                 // all good → green
+  });
+
+  deductFood(1);   // after grading — the autosave it triggers must carry the verdicts
+  gameState.moduleState.light.actionsThisSession++;
+
+  // Beat 1 — show the verdicts: flash spots.
+  setTimeout(() => {
     renderLightLab(gameState);
     placedIds.forEach(id => {
       const el = lightSpotEl(id);
@@ -5815,8 +5821,6 @@ function feedZones() {
   if (placedIds.length === 0) { shakeActionButton(); flashMixBanner(); return; }   // need ≥1 plant
 
   mc.phase = 'running';
-  deductFood(1);
-  gameState.moduleState.nutrients.actionsThisSession++;
 
   const activeZones = Object.keys(MIXING_DIALS).filter(z => mixZoneLivingCount(z) > 0);
   mc.feedLog = ['&gt; FEEDING'].concat(activeZones.map(z => `T${z.slice(1)} ${mixReadingHTML(mc.zones[z])}`));
@@ -5831,34 +5835,38 @@ function feedZones() {
   }
   renderMixingConsole(gameState);
 
-  // Beat 1 — resolve each plant against its zone mix; flash + store the verdict.
-  // The badge/pip is NOT applied now — it lands when the plant is returned to the
-  // tray (Pipe-Maze style). We stash the marker spec on the spot for that moment.
-  setTimeout(() => {
-    placedIds.forEach(id => {
-      const z = mixZoneOf(id);
-      const spot = mc.slots[id];
-      const plant = gameState.tray[spot.slotIndex];
-      if (!plant || plant.health <= 0) return;
-      const res = mixOutcome(plant, mc.zones[z]);
-      spot.graded = true;
-      spot.outcome = res.outcome;
-      spot.offenders = res.offenders;
-      spot.flash = res.outcome === 'good' ? 'ok' : res.outcome === 'deficiency' ? 'near' : 'far';
+  // Grade every placed plant NOW (final the instant Feed starts); the badge/pip
+  // still lands on return (Pipe-Maze style) — stashed on the spot until then.
+  placedIds.forEach(id => {
+    const z = mixZoneOf(id);
+    const spot = mc.slots[id];
+    const plant = gameState.tray[spot.slotIndex];
+    if (!plant || plant.health <= 0) return;
+    const res = mixOutcome(plant, mc.zones[z]);
+    spot.graded = true;
+    spot.outcome = res.outcome;
+    spot.offenders = res.offenders;
+    spot.flash = res.outcome === 'good' ? 'ok' : res.outcome === 'deficiency' ? 'near' : 'far';
 
-      if (res.outcome !== 'good') {
-        const names = res.offenders.map(o => MIX_NUT_NAME[o.nu]).join(', ');
-        const dir = res.offenders[0].dir === 'over' ? 'Too much' : 'Too little';
-        spot.pendingMarker = {
-          kind: res.outcome === 'burn' ? 'nutrient-burn' : 'deficiency',
-          pipCost: res.pip,
-          deathCause: res.outcome === 'burn' ? 'nutrient-burn' : 'nutrient-deficiency',
-          detail: `${dir} ${names} (−${res.pip}).`,
-        };
-      } else {
-        spot.pendingMarker = null;
-      }
-    });
+    if (res.outcome !== 'good') {
+      const names = res.offenders.map(o => MIX_NUT_NAME[o.nu]).join(', ');
+      const dir = res.offenders[0].dir === 'over' ? 'Too much' : 'Too little';
+      spot.pendingMarker = {
+        kind: res.outcome === 'burn' ? 'nutrient-burn' : 'deficiency',
+        pipCost: res.pip,
+        deathCause: res.outcome === 'burn' ? 'nutrient-burn' : 'nutrient-deficiency',
+        detail: `${dir} ${names} (−${res.pip}).`,
+      };
+    } else {
+      spot.pendingMarker = null;
+    }
+  });
+
+  deductFood(1);   // after grading — the autosave it triggers must carry the verdicts
+  gameState.moduleState.nutrients.actionsThisSession++;
+
+  // Beat 1 — show the verdicts: terminal readout + flash.
+  setTimeout(() => {
     // Terminal switches from "feeding" to a per-tray result readout.
     mc.feedLog = ['&gt; RESULTS'].concat(activeZones.map(z => `Tray ${z.slice(1)}: ${zoneFeedResult(z) || '—'}`));
     renderTray(gameState);
@@ -6404,8 +6412,6 @@ function confirmOrientations() {
   if (placed.length === 0) { shakeActionButton(); flashOrientBanner(); return; }
 
   oc.phase = 'running';
-  deductFood(1);
-  gameState.moduleState.orientation.actionsThisSession++;
 
   // Resolve each tube; show the verdict (status light) now, but STASH the reveal /
   // high-risk flag / pip for when the plant is returned (global convention).
@@ -6425,6 +6431,8 @@ function confirmOrientations() {
       : null;
   });
 
+  deductFood(1);   // after grading — the autosave it triggers must carry the verdicts
+  gameState.moduleState.orientation.actionsThisSession++;
   renderOrientationChamber(gameState);
 
   // Confirmation sparkle pass + tube flash, then settle into 'resolved'.
@@ -6972,8 +6980,6 @@ function hydroLockIn() {
   if (placed.length === 0) { shakeActionButton(); flashHydroBanner(); return; }
 
   hb.phase = 'running';
-  deductFood(1);
-  gameState.moduleState.hydroponics.actionsThisSession++;
 
   // Resolve each placed pot; show verdict now, STASH reveal/markers for return.
   placed.forEach(k => {
@@ -7000,6 +7006,8 @@ function hydroLockIn() {
     pot.flash = markers.length ? 'far' : thrive ? 'ok' : 'near';
   });
 
+  deductFood(1);   // after grading — the autosave it triggers must carry the verdicts
+  gameState.moduleState.hydroponics.actionsThisSession++;
   renderHydroponicBay(gameState);
 
   // Beat: flash pots + particle burst, then settle into 'resolved'.
@@ -7684,9 +7692,7 @@ function radRunExposure() {
   if (placed.some(k => !rd.bays[k].material)) { shakeActionButton(); flashRadBanner(); return; }  // finish shielding every seated bay first
 
   rd.phase = 'running';
-  deductFood(1);
   rd.exposures++;
-  gameState.moduleState.radiation.actionsThisSession++;
 
   const typeKey = rd.eventType, tinfo = RAD_TYPES[typeKey];
   const log = [`<div class="rt-evt">${tinfo.label.toUpperCase()}</div>`, `<div class="rt-line">Dose ${radDoseBar(tinfo.dose)}</div>`, `<div class="rt-sep"></div>`];
@@ -7713,6 +7719,8 @@ function radRunExposure() {
     log.push(`<div class="rt-bay">B${k + 1} <span class="rt-mat">${shieldCode}</span> ${status}</div>`);
   });
   rd.log = log;
+  deductFood(1);   // after grading — the autosave it triggers must carry the verdicts
+  gameState.moduleState.radiation.actionsThisSession++;
 
   renderRadiationDome(gameState);
 
@@ -9859,12 +9867,63 @@ const SAVE_KEY     = 'starseed-station-save';    // Bible §0: one key, JSON gam
 const PREFS_KEY    = 'starseed-station-prefs';   // survives New Run (difficulty choice)
 const SAVE_VERSION = 1;
 
-/* Transient per-visit room benches — never persisted; a resume always starts
-   at the hub. The game autosaves at every state change (food, aging, badges,
-   deaths, unlocks) as well as on hub arrival, so a reload never undoes an
-   outcome; only the in-room bench layout is lost. */
-const TRANSIENT_KEYS = ['substrateLab', 'pipeMaze', 'lightLab', 'mixingConsole',
-  'orientationChamber', 'hydroponicBay', 'radiationDome', 'pollinationDome', 'harvestBay'];
+/* Room benches ARE persisted (plants left sitting in a room with verdicts
+   pending come back exactly as they were — no reload-to-dodge-a-penalty), the
+   Harvest Bay is not (its pile is DOM-local and collection is free to redo).
+   A resume always lands at the hub. The game autosaves at every state change
+   (food, aging, badges, deaths, unlocks) as well as on hub arrival. */
+const ROOM_STATE_KEYS = ['substrateLab', 'pipeMaze', 'lightLab', 'mixingConsole',
+  'orientationChamber', 'hydroponicBay', 'radiationDome', 'pollinationDome'];
+/* Keys never written to the save: timer handles + per-frame sprite scratch. */
+const SAVE_SKIP_KEYS = new Set(['_hintTimer', '_frame']);
+
+/* A save can land while a room is mid-"running" (the food is paid the instant
+   the action starts; the beats that paint the verdict come later). Every room
+   grades synchronously at press time, so on resume we only need to finish what
+   the beats would have done to STATE: age any plant the grow rooms hadn't yet,
+   then land in 'resolved' so the player clicks them home. A real-time
+   Pollination session can't resume mid-flight — it restarts in setup unpaid. */
+function resumeRoomStates() {
+  const pm = gameState.pipeMaze;
+  if (pm && pm.phase === 'running') {
+    Object.values(pm.ports).forEach(port => {
+      const p = port.slotIndex != null ? gameState.tray[port.slotIndex] : null;
+      if (p && p.health > 0 && port.grade && roomAcceptsStage('water', p)) agePlant(p);
+    });
+    pm.revealed = true; pm.activePort = null;
+    pm.phase = Object.values(pm.ports).some(x => x.grade) ? 'resolved' : 'setup';
+  }
+  const ll = gameState.lightLab;
+  if (ll && ll.phase === 'running') {
+    Object.values(ll.spots).forEach(spot => {
+      const p = spot.slotIndex != null ? gameState.tray[spot.slotIndex] : null;
+      if (p && p.health > 0 && spot.graded && roomAcceptsStage('light', p)) agePlant(p);
+    });
+    ll.activeSpot = null;
+    ll.phase = Object.values(ll.spots).some(x => x.graded) ? 'resolved' : 'setup';
+  }
+  // Boost rooms: verdicts are stored before the food is paid, so 'running'
+  // always carries grades — but fall back to setup if somehow none exist.
+  const settle = (st, slotsObj, activeKey) => {
+    if (!st || st.phase !== 'running') return;
+    st.phase = Object.values(slotsObj).some(x => x.graded) ? 'resolved' : 'setup';
+    st[activeKey] = null;
+  };
+  settle(gameState.mixingConsole,     gameState.mixingConsole     ? gameState.mixingConsole.slots     : {}, 'activeZone');
+  settle(gameState.orientationChamber, gameState.orientationChamber ? gameState.orientationChamber.tubes : {}, 'activeTube');
+  settle(gameState.hydroponicBay,     gameState.hydroponicBay     ? gameState.hydroponicBay.pots      : {}, 'activePot');
+  settle(gameState.radiationDome,     gameState.radiationDome     ? gameState.radiationDome.bays      : {}, 'activeBay');
+  if (gameState.mixingConsole && gameState.mixingConsole.phase === 'setup') gameState.mixingConsole.feedLog = null;
+  const pd = gameState.pollinationDome;
+  if (pd && pd.phase === 'running') {
+    pd.phase = 'setup'; pd.counts = null; pd.hint = null;
+    Object.values(pd.spots).forEach(sp => { sp.status = 'waiting'; sp.t = 0; sp.dur = 0; });
+    pollResetTools(pd);
+  }
+  // A stage advance during resume may have queued a hub unlock — the Continue
+  // path renders the hub directly (no transitionTo), so flush it here.
+  _pendingHubUnlocks.splice(0).forEach(k => unlockRoom(k, { animate: false }));
+}
 
 /* --- difficulty -------------------------------------------------------------
    Starting food is the runway (distance to starving); quota − food is the net
@@ -9975,8 +10034,9 @@ function saveState() {
         locked:     s.seedBank.locked,
         rackLayout: s.seedBank.rackLayout,
       },
+      rooms: Object.fromEntries(ROOM_STATE_KEYS.map(k => [k, s[k] || null])),
     };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(snap));
+    localStorage.setItem(SAVE_KEY, JSON.stringify(snap, (k, v) => SAVE_SKIP_KEYS.has(k) ? undefined : v));
     return true;
   } catch (e) {
     console.error('saveState failed:', e);
@@ -10002,9 +10062,11 @@ function loadState() {
     gameState.seedBank.locked     = snap.seedBank.locked || [];
     gameState.seedBank.rackLayout = snap.seedBank.rackLayout || null;
   }
-  TRANSIENT_KEYS.forEach(k => { gameState[k] = null; });
+  ROOM_STATE_KEYS.forEach(k => { gameState[k] = (snap.rooms && snap.rooms[k]) || null; });
+  gameState.harvestBay = null;
   gameState.ui.currentScreen = 'hub';
   gameState.ui.selectedSlot  = null;
+  resumeRoomStates();
   return true;
 }
 
