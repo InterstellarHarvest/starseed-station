@@ -10116,10 +10116,32 @@ function mountStartupScreen(opts = {}) {
   layer.appendChild(inner);
   const menu = inner.querySelector('.startup-menu');
 
+  /* "Entering the station": the text + buttons drop out fast while the station
+     sprite zooms toward the stage centre and the whole title layer fades, so the
+     hub (already rendered underneath) comes up behind it. */
+  const ENTER_MS = 850;
   function dismiss(then) {
-    layer.classList.add('fading');
     stage.style.removeProperty('--tt-max-width');
-    setTimeout(() => { if (field) field.destroy(); layer.remove(); if (then) then(); }, 650);
+    const st = layer.querySelector('.startup-station');
+    if (st) {
+      // Freeze the sprite where the flex column laid it out, then release the
+      // transform toward centre. stageLocalRect undoes --fs-scale for us.
+      const r = stageLocalRect(st);
+      st.style.animation = 'none';
+      st.style.position = 'absolute';
+      st.style.left = r.left + 'px';
+      st.style.top  = r.top + 'px';
+      st.style.width  = r.w + 'px';
+      st.style.height = r.h + 'px';
+      st.style.margin = '0';
+      const dx = 640 - (r.left + r.w / 2);
+      const dy = 360 - (r.top  + r.h / 2);
+      void st.offsetWidth;
+      st.classList.add('zoom');
+      st.style.transform = `translate(${dx}px, ${dy}px) scale(7)`;
+    }
+    layer.classList.add('entering');
+    setTimeout(() => { if (field) field.destroy(); layer.remove(); if (then) then(); }, ENTER_MS);
   }
 
   function showMainMenu() {
