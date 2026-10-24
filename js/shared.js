@@ -897,6 +897,7 @@ function slotTooltipContent(plant, idx) {
   showIf('photoperiod', 'revealed',  'Photoperiod', plant.photoperiodTrigger);
   // Substrate assignment (set in Substrate Lab — not a trait reveal).
   if (plant.assignedSubstrate) lines.push(tlv('substrate', 'Planted in', plant.assignedSubstrate));
+  if (plant.shieldMaterial)    lines.push(tlv('revealed',  'Shield',     RAD_MATERIALS[plant.shieldMaterial].short));
   // Room-supplied action hint (e.g. Seed Bank's "Click to put back").
   const hint = typeof _trayClickHint === 'function' ? _trayClickHint(plant) : _trayClickHint;
   if (hint) lines.push(`<span class="tt-row hub-unlock-hint">${hint}</span>`);
@@ -1091,11 +1092,6 @@ function openAutopsyReview() {
   modal.querySelector('.autopsy-close').addEventListener('click', closeAutopsyReview);
   modal.addEventListener('click', e => { if (e.target === modal) closeAutopsyReview(); });
   host.appendChild(modal);
-
-  // ESC to close
-  const escHandler = e => { if (e.key === 'Escape') closeAutopsyReview(); };
-  document.addEventListener('keydown', escHandler);
-  modal._escHandler = escHandler;
 }
 
 function buildAutopsyCard(entry) {
@@ -1135,7 +1131,6 @@ function buildAutopsyCard(entry) {
 function closeAutopsyReview() {
   const modal = document.querySelector('.autopsy-modal');
   if (!modal) return;
-  if (modal._escHandler) document.removeEventListener('keydown', modal._escHandler);
   modal.remove();
 }
 
@@ -1461,6 +1456,7 @@ function deductFood(amount = 1) {
   run.colonyFood  = Math.max(0, run.colonyFood - (amount || 0));
   run.actionCount = (run.actionCount || 0) + 1;
   run.foodSpent   = (run.foodSpent || 0) + (amount || 0);
+  if (run.stormAt != null && run.actionCount >= run.stormAt) run.stormPending = true;   // lands on the next hub arrival
   updateFoodBar(run.colonyFood, run.colonyQuota);
   autosave();
   if (run.colonyFood <= 0) maybeEndRun();
@@ -1508,6 +1504,7 @@ const TRAIT_FIELD = {
 function revealTrait(plant, key) {
   const f = TRAIT_FIELD[key];
   if (!plant || !f) return;
+  guideRecord(plant.speciesId, key);   // discovery outlives the run (Field Guide)
   const value = (key === 'substrate')
     ? substratePreferenceOf(plant)
     : (key === 'gravity')
@@ -1771,6 +1768,7 @@ function resetHubRooms(state, { clearTray = false } = {}) {
   // selection-complete flag (Bible §5 unlock trigger).
   state.run.seedBankSelectionComplete = false;
   state.run.waterTank = null;
+  state.run.stormAt = null; state.run.stormIndex = 0; state.run.stormPending = false;
   state.seedBank.rackLayout = null;
   state.substrateLab = null;   // discard any in-progress Substrate Lab bench
   state.pipeMaze = null;       // discard any in-progress Pipe Maze bench
@@ -2235,6 +2233,19 @@ function renderTopBar({ roomName, food, quota, actionCount }) {
   attachTooltip(ac, () => `<span class="tt-name">Actions</span><span class="tt-row">Room actions taken this run — each one cost 1 food.</span>`);
   bar.appendChild(ac);
 
+  // Specialist: solar-storm countdown (actions until the next one lands).
+  if (stormActive()) {
+    const st = document.createElement('span');
+    const n = stormCountdown();
+    st.className = 'tb-storm' + (n <= 1 ? ' soon' : '');
+    st.textContent = gameState.run.stormPending ? '☢ STORM AT THE HUB' : `☢ STORM IN ${n}`;
+    attachTooltip(st, () =>
+      `<span class="tt-name">Solar storm — ${RAD_TYPES[stormType()].label}</span>` +
+      `<span class="tt-row">Hits the hub in ${n} action${n === 1 ? '' : 's'}. Every plant is exposed wearing the shield the Radiation Dome fitted on it.</span>` +
+      `<span class="tt-row hub-unlock-hint">Unshielded sensitive plants take damage — fit shields first.</span>`);
+    bar.appendChild(st);
+  }
+
   // Demo 15b — game-only help button: replays the current screen's tour.
   if (_gameMode) {
     const help = document.createElement('button');
@@ -2246,6 +2257,15 @@ function renderTopBar({ roomName, food, quota, actionCount }) {
       `<span class="tt-name">Tutorial</span>` +
       `<span class="tt-row hub-unlock-hint">Replay this screen's walkthrough</span>`);
     bar.appendChild(help);
+    const book = document.createElement('button');
+    book.type = 'button';
+    book.className = 'tb-help tb-guide';
+    book.textContent = '✎';
+    book.addEventListener('click', openFieldGuide);
+    attachTooltip(book, () =>
+      `<span class="tt-name">Field Guide</span>` +
+      `<span class="tt-row hub-unlock-hint">Every hidden trait you've discovered, across all runs</span>`);
+    bar.appendChild(book);
   }
 }
 
@@ -7713,6 +7733,7 @@ function radRunExposure() {
     const mk = bay.material;
     const o = radOutcome(plant, mk, typeKey);
     if (mk) rd.known[mk] = true;                       // seeing a material work/fail reveals its rating
+    plant.shieldMaterial = mk;                         // fitted for good — it's what the plant wears in a storm
 
     bay.graded = true;
     bay.pendingReveal = 'radiation';
@@ -7854,6 +7875,7 @@ function radBayTooltip(k) {
     tlv('revealed', 'Radiation', RAD_TOL_LABEL[radiationToleranceOf(plant)]),
     tlv('water', 'Shield', bay.material ? RAD_MATERIALS[bay.material].short : 'none'),
     `<span class="tt-row"><b style="color:${col};">${shielded ? 'Shielded — no damage' : 'Damaged — DNA hit'}</b></span>`,
+    `<span class="tt-row">The ${bay.material ? RAD_MATERIALS[bay.material].short : 'empty'} fitting stays on this plant for storms.</span>`,
     `<span class="tt-row hub-unlock-hint">Click to return to tray</span>`,
   ].join('');
 }
@@ -9654,6 +9676,21 @@ function openRunSummary() {
 
   const actions = document.createElement('div');
   actions.className = 'hs-actions';
+  const cp = document.createElement('button');
+  cp.className = 'hs-btn';
+  cp.textContent = 'Copy results';
+  cp.addEventListener('click', () => {
+    const text = hsResultsText();
+    const done = () => { cp.textContent = 'Copied ✓'; setTimeout(() => { cp.textContent = 'Copy results'; }, 1600); };
+    const fallback = () => { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (_) {} ta.remove(); done(); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+  });
+  actions.appendChild(cp);
+  const fgb = document.createElement('button');
+  fgb.className = 'hs-btn';
+  fgb.textContent = 'Field Guide';
+  fgb.addEventListener('click', openFieldGuide);
+  actions.appendChild(fgb);
   if (gameState.deadTray.length) {
     const ab = document.createElement('button');
     ab.className = 'hs-btn';
@@ -9667,7 +9704,7 @@ function openRunSummary() {
   // fallback when no restart handler is registered.
   if (!harvRunOver() || !_newRunHandler) {
     const close = document.createElement('button');
-    close.className = 'hs-btn';
+    close.className = 'hs-btn close';
     close.textContent = 'Close ✕';
     close.addEventListener('click', () => modal.remove());
     actions.appendChild(close);
@@ -9684,6 +9721,33 @@ function openRunSummary() {
   hsBuildColony(body);
   host.appendChild(modal);
   autosave();
+}
+
+/* Plain-text debrief for a teacher's records (Copy results). */
+function hsResultsText() {
+  const run = gameState.run, rank = hsRunRank();
+  const d = DIFFICULTY[run.difficulty] || DIFFICULTY.commander;
+  const lines = [
+    `STARSEED STATION — run report (${new Date().toLocaleDateString()})`,
+    `Posting: ${d.label}   Food: ${run.colonyFood} / ${run.colonyQuota} quota   Rank: ${rank.title.replace(/★/g, '').trim()}`,
+    `Actions: ${run.actionCount || 0}   Spent: ${run.foodSpent || 0}   Earned: ${run.foodEarned || 0}`,
+    '',
+    'PLANTS',
+  ];
+  gameState.tray.forEach((p, i) => {
+    if (!p) return;
+    let fate;
+    if (p.health <= 0) { const e = gameState.deadTray.find(x => x.plant.slotIndex === i && x.plant.speciesId === p.speciesId); fate = `died — ${e ? e.causeLabel : 'unknown'}`; }
+    else if (p.stage === 'harvested') { const y = harvestYieldFor(p); fate = `harvested +${y.units}${y.reasons.length ? ' (' + y.reasons.join(', ') + ')' : ''}`; }
+    else if (p.missedPollination) fate = 'no fruit — missed pollination';
+    else fate = `still growing — ${p.stage}`;
+    const traits = (p.revealed || []).map(k => `${k}: ${p[TRAIT_FIELD[k].plant]}`).join(', ');
+    lines.push(`- ${p.name}: ${fate}${traits ? '  [' + traits + ']' : ''}`);
+  });
+  const { counts } = hsFailureData();
+  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  if (rows.length) { lines.push('', 'STRESS EVENTS BY ROOM'); rows.forEach(([room, n]) => lines.push(`- ${room}: ${n}`)); }
+  return lines.join('\n');
 }
 
 /* — COLONY tab — */
@@ -9972,7 +10036,7 @@ const DIFFICULTY = {
   cadet: {
     label: 'CADET', sub: 'first posting', rgb: '0, 255, 136',
     food: 95, quota: 130, lockedSpecies: [9, 13, 16, 18], radiation: false,
-    lines: ['Start 95 food', 'Quota 130', 'Limited seeds'],
+    lines: ['Start 95 food', 'Quota 130', 'Limited seeds', 'No storms'],
   },
   commander: {
     label: 'COMMANDER', sub: 'the standard run', rgb: '255, 204, 0',
@@ -9982,7 +10046,7 @@ const DIFFICULTY = {
   specialist: {
     label: 'SPECIALIST', sub: 'deep-space posting', rgb: '255, 68, 85',
     food: 60, quota: 120, lockedSpecies: [], radiation: true,
-    lines: ['Start 60 food', 'Quota 120', 'Radiation Dome online'],
+    lines: ['Start 60 food', 'Quota 120', 'Radiation Dome online', 'Solar storms hit the hub'],
   },
 };
 
@@ -10001,7 +10065,157 @@ function maybeUnlockRadiation() {
   if (d && d.radiation && gameState.moduleState.radiation &&
       gameState.moduleState.radiation.status === 'locked') {
     unlockRoomDelayed('radiation');
+    if (gameState.run.stormAt == null) gameState.run.stormAt = (gameState.run.actionCount || 0) + STORM_FIRST_AFTER;
   }
+}
+
+/* ============================================================================
+   Field Guide — discovery that outlives the run. Every hidden trait revealed
+   on any species, on any run, is written to localStorage; the guide shows all
+   20 species with what the player has learned so far (??? for the rest).
+   Reachable from the title screen and the top-bar book button; a teacher can
+   wipe it from inside the guide.
+   ============================================================================ */
+const GUIDE_KEY = 'starseed-station-guide';
+const GUIDE_TRAITS = [
+  { key: 'substrate',   label: 'Substrate',  of: p => substratePreferenceOf(p) },
+  { key: 'gravity',     label: 'Gravity',    of: p => gravityResponseOf(p) },
+  { key: 'photoperiod', label: 'Day-length', of: p => photoperiodTriggerOf(p) },
+  { key: 'ph',          label: 'pH',         of: p => phPreferenceOf(p) },
+  { key: 'radiation',   label: 'Radiation',  of: p => radiationToleranceOf(p) },
+];
+function loadGuide()  { try { return JSON.parse(localStorage.getItem(GUIDE_KEY)) || {}; } catch (_) { return {}; } }
+function saveGuide(g) { try { localStorage.setItem(GUIDE_KEY, JSON.stringify(g)); } catch (_) {} }
+function clearGuide() { try { localStorage.removeItem(GUIDE_KEY); } catch (_) {} }
+function guideRecord(speciesId, key) {
+  const g = loadGuide();
+  const e = g[speciesId] || (g[speciesId] = {});
+  if (!e[key]) { e[key] = true; saveGuide(g); }
+}
+function guideKnownCount(g) {
+  return Object.values(g || loadGuide()).reduce((n, e) => n + Object.keys(e).length, 0);
+}
+
+function openFieldGuide() {
+  if (document.querySelector('.guide-modal')) return;
+  const host = document.getElementById('stage');
+  if (!host) return;
+  const g = loadGuide();
+  const known = guideKnownCount(g), total = Object.keys(SPECIES).length * GUIDE_TRAITS.length;
+  const modal = document.createElement('div');
+  modal.className = 'guide-modal';
+  const panel = document.createElement('div');
+  panel.className = 'guide-panel';
+  panel.innerHTML = `
+    <div class="guide-head">
+      <div class="guide-title">FIELD GUIDE</div>
+      <div class="guide-sub">${known} of ${total} hidden traits discovered — across every run on this machine</div>
+      <button class="hs-btn close guide-close">Close ✕</button>
+    </div>
+    <div class="guide-grid"></div>
+    <div class="guide-foot">
+      <span>Hidden traits are learned by testing a plant in a room. Packet traits are always shown.</span>
+      <button class="startup-back guide-clear">reset guide</button>
+    </div>`;
+  const grid = panel.querySelector('.guide-grid');
+  Object.keys(SPECIES).map(Number).forEach(id => {
+    const sp = SPECIES[id], plant = { speciesId: id, spriteFamily: sp.family, stage: 'vegetative', cssFilter: SPECIES_FILTERS[id] || 'none', health: 5 };
+    const card = document.createElement('div');
+    card.className = 'guide-card';
+    const spr = document.createElement('div');
+    spr.className = 'guide-sprite';
+    applyPlantSpriteCell(spr, plant, 51);
+    card.appendChild(spr);
+    const hidden = GUIDE_TRAITS.map(t => {
+      const got = !!(g[id] && g[id][t.key]);
+      return `<div class="guide-row ${got ? 'known' : 'unknown'}"><span>${t.label}</span><span>${got ? labelOf(t.of(plant)) : '???'}</span></div>`;
+    }).join('');
+    card.innerHTML += `
+      <div class="guide-name">${sp.name}</div>
+      <div class="guide-blurb">${SPECIES_BLURB[id] || ''}</div>
+      <div class="guide-rows">
+        <div class="guide-row"><span>Water</span><span>${sp.water}</span></div>
+        <div class="guide-row"><span>Light</span><span>${sp.light}</span></div>
+        <div class="guide-row"><span>Appetite</span><span>${sp.nutrient}</span></div>
+        <div class="guide-row"><span>Pollination</span><span>${sp.pollination}</span></div>
+        ${hidden}
+      </div>`;
+    grid.appendChild(card);
+  });
+  panel.querySelector('.guide-close').addEventListener('click', closeFieldGuide);
+  const clr = panel.querySelector('.guide-clear');
+  clr.addEventListener('click', () => {
+    if (clr.dataset.armed) { clearGuide(); closeFieldGuide(); openFieldGuide(); return; }
+    clr.dataset.armed = '1'; clr.textContent = 'click again to erase everything learned';
+    setTimeout(() => { clr.dataset.armed = ''; clr.textContent = 'reset guide'; }, 3000);
+  });
+  modal.addEventListener('click', e => { if (e.target === modal) closeFieldGuide(); });
+  modal.appendChild(panel);
+  host.appendChild(modal);
+}
+function closeFieldGuide() { const m = document.querySelector('.guide-modal'); if (m) m.remove(); }
+
+/* ============================================================================
+   Solar storms (Specialist) — the Radiation Dome's stakes. Once the dome is
+   online a storm is scheduled STORM_FIRST_AFTER actions out, then every
+   STORM_EVERY. When the counter lands, the next hub arrival resolves it: every
+   living plant is exposed to the storm's type wearing whatever shield the
+   dome last fitted on it (plant.shieldMaterial) — unshielded sensitive plants
+   take real damage. The top bar counts down so the player can plan the dome
+   visit. Storms also reveal each plant's radiation tolerance (it just lived
+   through one).
+   ============================================================================ */
+const STORM_FIRST_AFTER = 5;
+const STORM_EVERY = 7;
+function stormActive()   { return gameState.run.stormAt != null; }
+function stormCountdown(){ return Math.max(0, gameState.run.stormAt - (gameState.run.actionCount || 0)); }
+function stormType()     { return RAD_TYPE_ORDER[(gameState.run.stormIndex || 0) % RAD_TYPE_ORDER.length]; }
+
+function resolveStorm() {
+  const run = gameState.run;
+  if (!run.stormPending) return;
+  const typeKey = stormType(), tinfo = RAD_TYPES[typeKey];
+  const rows = [];
+  gameState.tray.forEach(p => {
+    if (!p || p.health <= 0) return;
+    const mk = p.shieldMaterial || null;
+    const o = radOutcome(p, mk, typeKey);
+    revealTrait(p, 'radiation');
+    if (!o.shielded) {
+      addStressMarker(p, { kind: 'dna-damage', pipCost: o.pip, deathCause: 'radiation',
+        detail: `${tinfo.label} hit the hub — ${mk ? RAD_MATERIALS[mk].short + ' shield too weak' : 'no shield fitted'} (−${o.pip}) + DNA damage.` });
+    }
+    rows.push({ name: p.name, shield: mk ? RAD_MATERIALS[mk].short : 'none', tol: RAD_TOL_LABEL[radiationToleranceOf(p)],
+                ok: o.shielded, pip: o.pip, dead: p.health <= 0 });
+  });
+  run.stormIndex = (run.stormIndex || 0) + 1;
+  run.stormAt = (run.actionCount || 0) + STORM_EVERY;
+  run.stormPending = false;
+  autosave();
+  renderTopBar({ roomName: 'STATION HUB', food: run.colonyFood, quota: run.colonyQuota, actionCount: run.actionCount });
+  openStormReport(tinfo, rows);
+}
+
+function openStormReport(tinfo, rows) {
+  if (document.querySelector('.storm-modal')) return;
+  const host = document.getElementById('game-panel');
+  if (!host) return;
+  const modal = document.createElement('div');
+  modal.className = 'storm-modal';
+  const hit = rows.filter(r => !r.ok).length;
+  modal.innerHTML = `
+    <div class="storm-panel">
+      <div class="storm-title">☢ ${tinfo.label.toUpperCase()}</div>
+      <div class="storm-sub">A solar storm swept the station. Dose ${radDoseBar(tinfo.dose)}</div>
+      <div class="storm-rows">${rows.map(r =>
+        `<div class="storm-row ${r.ok ? 'ok' : 'bad'}"><span>${r.name}</span><span class="storm-dim">${r.tol} · shield ${r.shield}</span>` +
+        `<span>${r.ok ? '✓ shielded' : (r.dead ? '✕ killed' : `✕ −${r.pip}`)}</span></div>`).join('')}</div>
+      <div class="storm-foot">${hit ? `${hit} plant${hit === 1 ? '' : 's'} took damage. ` : 'Every plant was protected. '}
+        Fit shields in the Radiation Dome — they stay on the plant. Next storm in ${STORM_EVERY} actions.</div>
+      <button class="hs-btn primary storm-close">Understood</button>
+    </div>`;
+  modal.querySelector('.storm-close').addEventListener('click', () => { modal.remove(); maybeEndRun(200); });
+  host.appendChild(modal);
 }
 
 /* --- game mode gate ---------------------------------------------------------
@@ -10009,6 +10223,21 @@ function maybeUnlockRadiation() {
    run-over trigger so demo scenario pages keep their sandbox behavior. */
 let _gameMode = false;
 function enableGameMode() { _gameMode = true; }
+
+/* Escape closes the innermost open window, one per press: lesson → autopsy
+   review → field guide → run summary (only when it has a Close, i.e. the run
+   is still live) → open seed packet → seed-bank confirm → tutorial. Registered
+   once at load; the tutorial has its own handler for Enter/Space. */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (document.querySelector('.autopsy-lesson'))      { closeAutopsyLesson(); return; }
+  if (document.querySelector('.autopsy-modal'))       { closeAutopsyReview(); return; }
+  if (document.querySelector('.guide-modal'))         { closeFieldGuide(); return; }
+  const summary = document.querySelector('.harv-summary-modal');
+  if (summary) { const close = summary.querySelector('.hs-btn.close'); if (close) close.click(); return; }
+  if (gameState.ui.seedBankFloatingPacket)            { putBackFloating(); return; }
+  if (document.querySelector('.sb-confirm-layer'))    { closeExitConfirm(); return; }
+});
 
 /* --- the stage-advance spine -------------------------------------------------
    agePlant calls this on every real stage change, whichever room did the aging.
@@ -10040,6 +10269,7 @@ function onStageAdvanced(plant, from, to) {
 function onHubArrival() {
   while (_pendingHubUnlocks.length) unlockRoomDelayed(_pendingHubUnlocks.shift());
   autosave();
+  if (gameState.run.stormPending) setTimeout(() => { if (gameState.ui.currentScreen === 'hub') resolveStorm(); }, SLIDE_MS + 250);
 }
 
 /* --- save / load ------------------------------------------------------------ */
@@ -10205,6 +10435,7 @@ function mountStartupScreen(opts = {}) {
     <div class="startup-title">STARSEED<br>STATION</div>
     <div class="startup-sub">grow the food · learn the science · feed the colony</div>
     <div class="startup-menu"></div>
+    <div class="startup-credit">an educational science game · esc closes any window</div>
   `;
   layer.appendChild(inner);
   const menu = inner.querySelector('.startup-menu');
@@ -10262,6 +10493,23 @@ function mountStartupScreen(opts = {}) {
     n.innerHTML = '★ NEW RUN';
     n.addEventListener('click', showDifficulty);
     menu.appendChild(n);
+    const fg = document.createElement('button');
+    fg.className = 'startup-back';
+    fg.textContent = `✎ field guide · ${guideKnownCount()} traits known`;
+    fg.addEventListener('click', openFieldGuide);
+    menu.appendChild(fg);
+    // Classroom machines: wipe the previous player's run without starting one.
+    if (hasSaveState()) {
+      const clr = document.createElement('button');
+      clr.className = 'startup-back';
+      clr.textContent = 'clear saved run';
+      clr.addEventListener('click', () => {
+        if (clr.dataset.armed) { clearSaveState(); showMainMenu(); return; }
+        clr.dataset.armed = '1'; clr.textContent = 'click again to erase the saved run';
+        setTimeout(() => { clr.dataset.armed = ''; clr.textContent = 'clear saved run'; }, 3000);
+      });
+      menu.appendChild(clr);
+    }
   }
 
   function showDifficulty() {
@@ -10403,7 +10651,7 @@ const TUTORIALS = {
   ],
   radiation: [
     { shapes: [], box: { x: 478, y: 314 },
-      text: '<b>RADIATION DOME</b> — deep space is hostile. Test your shielding before the storms test it for you.' },
+      text: '<b>RADIATION DOME</b> — deep space is hostile. Solar storms will sweep the hub (watch the ☢ countdown in the top bar); a shield fitted here stays on the plant and is what it wears when the storm hits.' },
     { shapes: [{ rect: { x: 275, y: 349, w: 136, h: 158 } }, { rect: { x: 444, y: 348, w: 136, h: 158 } },
                { rect: { x: 615, y: 349, w: 136, h: 158 } }, { rect: { x: 788, y: 349, w: 136, h: 158 } }],
       box: { x: 436, y: 162 }, line: false,
