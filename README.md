@@ -6,8 +6,9 @@
 <p align="center"><em>Grow the food. Learn the science. Feed the colony.</em></p>
 
 <p align="center">
-  <b>Play it now:</b> download or clone this repo and open <code>index.html</code> in any modern desktop browser.<br>
-  No install, no build, no account. Your progress saves automatically.
+  <a href="https://interstellarharvest.github.io/starseed-station/"><b>▶ PLAY IN YOUR BROWSER</b></a><br>
+  No install, no account. Desktop browser recommended. Your progress saves automatically.<br>
+  <sub>Prefer offline? Download the repo and open <code>index.html</code>.</sub>
 </p>
 
 ---
