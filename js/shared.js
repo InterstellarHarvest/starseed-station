@@ -1209,10 +1209,10 @@ function setActionZone(buttons) {
 
 
 /* ============================================================================
-   Starfield — reusable canvas background. Per bible §9: "Space/void: #0a0a1a
-   with static star dots". Adds a <canvas> into the target container, draws N
-   dots at deterministic random positions, optionally animates a subtle alpha
-   twinkle on a subset of them.
+   Starfield — reusable canvas background. Adds a <canvas> into the target
+   container and draws N dots at deterministic random positions on three depth
+   layers; in twinkle mode they shimmer, slide very slowly sideways and shift
+   with the mouse (parallax), near layer most — slow and subtle on purpose.
 
    Usage:
      mountStarfield(document.body, { count: 240, twinkle: true });
@@ -1229,10 +1229,15 @@ function mountStarfield(container, opts = {}) {
     color:     opts.color    || 'rgba(255, 255, 255, 1)',
     minSize:   opts.minSize  != null ? opts.minSize  : 0.5,
     maxSize:   opts.maxSize  != null ? opts.maxSize  : 1.8,
-    twinkleFraction: opts.twinkleFraction != null ? opts.twinkleFraction : 0.35,
+    twinkleFraction: opts.twinkleFraction != null ? opts.twinkleFraction : 0.6,
     twinklePeriodMs: opts.twinklePeriodMs != null ? opts.twinklePeriodMs : 3500,
+    drift:     opts.drift    != null ? opts.drift    : 5,     // px/s at full depth — a slow, continuous sidereal slide
+    parallax:  opts.parallax != null ? opts.parallax : 14,    // px of mouse parallax at full depth (0 = off)
     seed:      opts.seed     || 1337,
   };
+  // Three depth layers: far stars are small, dim and barely move; near stars
+  // are bigger, brighter and slide/parallax the most. Depth drives everything.
+  const DEPTHS = [0.3, 0.6, 1];
 
   // Deterministic PRNG (mulberry32) so the star layout stays stable between
   // reloads and tweaks — players don't see stars hop around on every refresh.
@@ -1261,18 +1266,24 @@ function mountStarfield(container, opts = {}) {
   let stars = [];
   let rafId = null;
   let startTs = performance.now();
+  let lastTs = startTs;
+  let driftX = 0;                         // accumulated slide (px at depth 1)
+  const mouse = { tx: 0, ty: 0, x: 0, y: 0 };   // parallax target + eased current (−1..1)
 
   function regenerate() {
     const rng = mulberry32(cfg.seed);
     stars = [];
     for (let i = 0; i < cfg.count; i++) {
+      const depth = DEPTHS[Math.min(2, (rng() * 3) | 0)];
       stars.push({
         x: rng(),                                    // 0..1, scaled at draw time
         y: rng(),
-        size: cfg.minSize + rng() * (cfg.maxSize - cfg.minSize),
-        baseAlpha: 0.3 + rng() * 0.7,
+        depth,
+        size: (cfg.minSize + rng() * (cfg.maxSize - cfg.minSize)) * (0.6 + 0.5 * depth),
+        baseAlpha: (0.3 + rng() * 0.7) * (0.55 + 0.45 * depth),
         twinkles: rng() < cfg.twinkleFraction,
         phase: rng() * Math.PI * 2,                  // random offset so twinklers don't sync
+        rate: 0.6 + rng() * 1.1,                     // per-star twinkle speed so the field never pulses in unison
       });
     }
   }
@@ -1290,26 +1301,47 @@ function mountStarfield(container, opts = {}) {
     const w = canvas.width  / (window.devicePixelRatio || 1);
     const h = canvas.height / (window.devicePixelRatio || 1);
     ctx.clearRect(0, 0, w, h);
-    const t = (performance.now() - startTs) / cfg.twinklePeriodMs;
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - lastTs) / 1000);
+    lastTs = now;
+    const t = (now - startTs) / cfg.twinklePeriodMs;
+    if (cfg.twinkle) {
+      driftX += cfg.drift * dt;
+      mouse.x += (mouse.tx - mouse.x) * Math.min(1, dt * 2.5);   // eased follow — never snaps
+      mouse.y += (mouse.ty - mouse.y) * Math.min(1, dt * 2.5);
+    }
     for (let i = 0; i < stars.length; i++) {
       const s = stars[i];
       let alpha = s.baseAlpha;
       if (cfg.twinkle && s.twinkles) {
         // Sinusoidal alpha oscillation; keeps a non-zero floor so stars never
-        // fully blink out. Range: 40% → 100% of baseAlpha (more swing than the
-        // first pass, still subtle enough to read as ambient depth).
-        const osc = 0.5 + 0.5 * Math.sin((t * 2 * Math.PI) + s.phase);
-        alpha = s.baseAlpha * (0.4 + 0.6 * osc);
+        // fully blink out. Range: 25% → 100% of baseAlpha.
+        const osc = 0.5 + 0.5 * Math.sin((t * s.rate * 2 * Math.PI) + s.phase);
+        alpha = s.baseAlpha * (0.25 + 0.75 * osc);
       }
+      // Position: layout × canvas, plus the depth-scaled slide (wrapped) and
+      // the depth-scaled mouse parallax — near stars move most.
+      const px = (((s.x * w + driftX * s.depth) % w) + w) % w - mouse.x * cfg.parallax * s.depth;
+      const py = s.y * h - mouse.y * cfg.parallax * s.depth;
       ctx.globalAlpha = alpha;
       ctx.fillStyle = cfg.color;
       ctx.beginPath();
-      ctx.arc(s.x * w, s.y * h, s.size, 0, Math.PI * 2);
+      ctx.arc(px, py, s.size, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
     if (cfg.twinkle) rafId = requestAnimationFrame(draw);
   }
+
+  // Mouse parallax: pointer offset from the canvas centre, normalised −1..1.
+  function onMouse(e) {
+    if (!cfg.parallax) return;
+    const r = canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    mouse.tx = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1));
+    mouse.ty = Math.max(-1, Math.min(1, ((e.clientY - r.top)  / r.height) * 2 - 1));
+  }
+  window.addEventListener('mousemove', onMouse);
 
   function start() {
     if (rafId) cancelAnimationFrame(rafId);
@@ -1327,6 +1359,7 @@ function mountStarfield(container, opts = {}) {
   return {
     destroy() {
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('mousemove', onMouse);
       if (rafId) cancelAnimationFrame(rafId);
       canvas.remove();
     },
@@ -10082,7 +10115,7 @@ function mountStartupScreen(opts = {}) {
   function dismiss(then) {
     layer.classList.add('fading');
     stage.style.removeProperty('--tt-max-width');
-    setTimeout(() => { layer.remove(); if (then) then(); }, 650);
+    setTimeout(() => { if (field) field.destroy(); layer.remove(); if (then) then(); }, 650);
   }
 
   function showMainMenu() {
@@ -10136,7 +10169,7 @@ function mountStartupScreen(opts = {}) {
 
   showMainMenu();
   stage.appendChild(layer);
-  mountStarfield(stars, { count: 240, twinkle: true });
+  const field = mountStarfield(stars, { count: 260, twinkle: true });
   return layer;
 }
 
