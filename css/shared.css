@@ -2818,7 +2818,10 @@ body.anchor-tuning-mode .hub-status-icon:active { cursor: grabbing; }
 .startup-layer.fading { opacity: 0; pointer-events: none; }
 /* Entering: layer fades (slow, ease-in so the hub resolves as the station
    fills the frame); text/buttons drop out fast; the station zooms to centre. */
-.startup-layer.entering { opacity: 0; pointer-events: none; transition: opacity 0.85s cubic-bezier(0.6, 0, 0.9, 0.5); }
+/* The layer (stars + station) holds fully opaque while the station starts to
+   grow, then fades over the back half of the zoom — the hub only comes up as
+   the station is filling the frame, not before. */
+.startup-layer.entering { opacity: 0; pointer-events: none; transition: opacity 0.5s ease-in 0.35s; }
 .startup-layer.entering .startup-inner > :not(.startup-station) { opacity: 0; transition: opacity 0.18s ease; }
 .startup-station.zoom {
   transform-origin: center center;
