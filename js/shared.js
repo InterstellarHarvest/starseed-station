@@ -10127,6 +10127,13 @@ function mountStartupScreen(opts = {}) {
       // Freeze the sprite where the flex column laid it out, then release the
       // transform toward centre. stageLocalRect undoes --fs-scale for us.
       const r = stageLocalRect(st);
+      // Leave a same-size spacer in the flex column so the text beneath does
+      // not recentre (snap upward) the moment the sprite goes absolute.
+      const spacer = document.createElement('div');
+      spacer.style.width  = r.w + 'px';
+      spacer.style.height = r.h + 'px';
+      spacer.style.marginBottom = getComputedStyle(st).marginBottom;
+      st.parentElement.insertBefore(spacer, st);
       st.style.animation = 'none';
       st.style.position = 'absolute';
       st.style.left = r.left + 'px';
