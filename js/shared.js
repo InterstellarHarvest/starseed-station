@@ -668,6 +668,7 @@ const BADGE_ASSET = {
   'wrong-spectrum':{ asset: 'death-wrong-spectrum', name: 'Wrong light', negative: true },   // covers spectrum AND photoperiod (user wording 2026-07-19)
   'disorientation':{ asset: 'badge-root-disease',  name: 'Disorientation',      negative: true },   // strict gravitropic left wrong (reuses root-disease icon)
   'ph-lockout':    { asset: 'death-ph-lockout',     name: 'pH lockout',          negative: true },   // Solution Tank: pH out of safe band → nutrient lockout
+  'gravity-roots': { asset: 'badge-gravity-response', name: 'Gravity-dependent roots', negative: true },   // Solution Tank: strict gravitropic plant in water culture (−1)
   'missed-pollination': { asset: 'death-missed-pollination', name: 'Missed pollination', negative: true },   // Pollination Dome: flower closed → no fruit, no yield (pipCost 0 — the plant lives)
 };
 
@@ -925,6 +926,7 @@ const DEATH_CAUSES = {
   'wrong-substrate':      { asset: 'death-wrong-substrate',     label: 'Wrong substrate' },
   'missed-pollination':   { asset: 'death-missed-pollination',  label: 'Missed pollination' },
   'disorientation':       { asset: 'badge-root-disease',        label: 'Disorientation (root failure)' },
+  'gravity-roots':        { asset: 'badge-gravity-response',    label: 'Gravity-dependent roots (hydroponic failure)' },
 };
 
 /* ============================================================================
@@ -942,7 +944,7 @@ const DEATH_LESSONS = {
     concept: 'Water & irrigation',
     what: 'Without enough water a plant’s cells lose their internal pressure and go limp — it wilts, stops making food, and dries out. Water also carries nutrients up from the roots, so a thirsty plant starves as well.',
     signs: 'The water gauge sat below the plant’s need, and its tray tooltip showed MEDIUM or HIGH thirst. Wilting, pale, papery leaves are the first clue.',
-    fix: 'Turn the dial UP for thirsty plants. Check each plant’s water need in its tooltip and aim the gauge into its target band before you pressurize.',
+    fix: 'Turn the dial UP for thirsty plants. Low-water plants want about 20–40%, medium 45–65%, high 75–95% — read the need in the tray tooltip and set the dial there before you pressurize.',
     space: 'On the ISS, water is precious and recycled — growers meter every drop, because there is no rain in orbit.',
   },
   'overwater': {
@@ -981,7 +983,7 @@ const DEATH_LESSONS = {
     space: 'Every gram of fertiliser is carried up from Earth, so space growers aim for the exact dose — enough to thrive, nothing wasted.',
   },
   'ph-lockout': {
-    concept: 'Hydroponics: pH & availability',
+    concept: 'Solution Tank: pH & nutrient availability',
     what: 'pH decides whether nutrients stay dissolved and reachable. Push it too far acidic or too alkaline and the nutrients “lock out” — they are still in the tank, but the roots can no longer take them up. The plant starves surrounded by food.',
     signs: 'The pH meter drifted outside the safe band (about 5–9) at Lock In. Mashing the buttons overshoots the target.',
     fix: 'Nudge pH gently and let the meter settle — it drifts after each press. Keep it inside the safe band, then fine-tune toward the plant’s preferred zone once you learn it.',
@@ -1000,6 +1002,13 @@ const DEATH_LESSONS = {
     signs: 'The bloom timer ran out before the right tool reached the flower, leaving a missed-pollination badge.',
     fix: 'Match the tool to the flower before its timer empties: brush for self-pollinators, the bee-bot for insect flowers, the fan for wind flowers.',
     space: 'Orbital greenhouses really do hand-pollinate or run small fans — with no bees or breeze, someone has to move the pollen.',
+  },
+  'gravity-roots': {
+    concept: 'Gravity & hydroponics',
+    what: 'A strict gravitropic plant steers its roots by sensing gravity. Suspended in a tank of solution with nothing to push against, those roots grow weak and confused, and the plant cannot feed itself properly.',
+    signs: 'The Orientation Chamber revealed a STRICT gravity response, and the Solution Tank pot tooltip warned about gravity-dependent roots before Lock In.',
+    fix: 'Keep strict-gravity plants in a solid medium. Flexible and indifferent plants are the ones that thrive in the tank.',
+    space: 'Hydroponics in orbit works best with crops that don’t rely on gravity to orient their roots — one reason leafy greens lead the ISS menu.',
   },
   'disorientation': {
     concept: 'Gravity & gravitropism',
@@ -1433,7 +1442,9 @@ function roomAcceptsStage(roomKey, plant) {
 function stageLockReason(roomKey, plant, done) {
   if (done || roomAcceptsStage(roomKey, plant)) return null;
   const need = ROOM_INPUT_STAGE[roomKey];
-  return need ? `Needs<br>${STAGE_LABEL[need] || need}` : null;
+  if (!need) return null;
+  const past = plant && GROWTH_STAGES.indexOf(plant.stage) > GROWTH_STAGES.indexOf(need);
+  return past ? 'Done<br>here' : `Needs<br>${STAGE_LABEL[need] || need}`;
 }
 /* A grow room is COMPLETE when every living plant is past its input stage —
    i.e. nothing in the tray will ever need this room again. Plants still BELOW
@@ -1529,6 +1540,7 @@ const MARKER_DEATH_CAUSE = {
   'flood':         'overwater',
   'drought':       'drought',
   'disorientation':'disorientation',
+  'gravity-roots': 'gravity-roots',
   'ph-lockout':    'ph-lockout',
   'missed-pollination': 'missed-pollination',
 };
@@ -1542,7 +1554,9 @@ function addStressMarker(plant, marker) {
   const m = (typeof marker === 'string') ? { kind: marker } : (marker || {});
   if (!m.kind) return;
   plant.stressMarkers = plant.stressMarkers || [];
-  plant.stressMarkers.push({ kind: m.kind, detail: m.detail || null });
+  const roomKey = (gameState.ui.currentScreen || '').replace(/^room:/, '');
+  plant.stressMarkers.push({ kind: m.kind, detail: m.detail || null,
+    room: roomKey === 'center' ? null : (ROOMS[roomKey] || {}).label || null });
   if (!plant.badges.some(b => b.kind === m.kind))
     plant.badges.push({ kind: m.kind, value: m.value || null, detail: m.detail || null });
   const pip = m.pipCost || 0;
@@ -1600,9 +1614,9 @@ const SUBSTRATE_META = {
   regolith:    { label: 'Regolith',    category: 'soil-like',  asset: 'substrate-regolith',    ph: 8.5, drainage: 'Low',  aeration: 'Low',
                  desc: 'Crushed lunar/Mars rock. Alkaline, dense, poor drainage.' },
   rockwool:    { label: 'Rockwool',    category: 'inert',      asset: 'substrate-rockwool',    ph: 7.5, drainage: 'Med',  aeration: 'High',
-                 desc: 'Spun basalt fibre. Hydroponic staple; high pH, needs buffering.' },
+                 desc: 'Spun basalt fibre. A hydroponic staple — airy and clean.' },
   agar:        { label: 'Agar Gel',    category: 'water-only', asset: 'substrate-agar',        ph: 6.0, drainage: '—',    aeration: 'Low',
-                 desc: 'Nutrient gel. Water-culture medium — the hydroponic route.' },
+                 desc: 'Nutrient gel — the only route into the Solution Tank. Water-loving crops (lettuce, cress, potato) take to it; most others get root disease.' },
 };
 const SUBSTRATE_ORDER = ['perlite', 'vermiculite', 'coco', 'regolith', 'rockwool', 'agar'];
 
@@ -1685,7 +1699,7 @@ function phPreferenceOf(plant) {
    the slide-in/out direction relative to hub center.
    ============================================================================ */
 const ROOMS = {
-  center     : { label: 'Seed Bay',            dir: 'center',     hotspot: { x: 495, y: 156, w: 288, h: 220 }, glowAsset: 'hub-room-center-glow', roomLabel: 'SEED BANK' },
+  center     : { label: 'Seed Bank',            dir: 'center',     hotspot: { x: 495, y: 156, w: 288, h: 220 }, glowAsset: 'hub-room-center-glow', roomLabel: 'SEED BANK' },
   substrate  : { label: 'Substrate Lab',       dir: 'up-left',    hotspot: { x: 217, y:  10, w: 272, h: 141 } },
   water      : { label: 'Pipe Maze',           dir: 'up-right',   hotspot: { x: 784, y:  10, w: 263, h: 141 } },
   light      : { label: 'Light Lab',           dir: 'right',      hotspot: { x: 892, y: 157, w: 243, h: 141 } },
@@ -1873,8 +1887,8 @@ function hubRoomTooltipContent(key, state) {
     const phrase = ({
       unlocking:     { cat: 'stage',  label: 'Unlocking',   value: 'coming online' },
       ready:         { cat: 'stage',  label: 'Ready',       value: 'click to enter' },
-      'in-progress': { cat: 'water',  label: 'In progress', value: 'work in progress' },
-      complete:      { cat: 'health', label: 'Complete',    value: 'this session' },
+      'in-progress': { cat: 'water',  label: 'In progress', value: 'come back to finish' },
+      complete:      { cat: 'health', label: 'Complete',    value: 'nothing left to do here' },
     })[status] || { cat: 'stage', label: 'Ready', value: 'click to enter' };
     body = `<span class="tt-row"><span class="tt-label tt-cat-${phrase.cat}">${phrase.label}</span>` +
            `<span class="tt-value">${phrase.value}</span></span>`;
@@ -2218,6 +2232,7 @@ function renderTopBar({ roomName, food, quota, actionCount }) {
   const ac = document.createElement('span');
   ac.className = 'tb-action-count';
   ac.textContent = 'ACTIONS: ' + actionCount;
+  attachTooltip(ac, () => `<span class="tt-name">Actions</span><span class="tt-row">Room actions taken this run — each one cost 1 food.</span>`);
   bar.appendChild(ac);
 
   // Demo 15b — game-only help button: replays the current screen's tour.
@@ -2502,7 +2517,7 @@ function seedPacketTooltip(id) {
   if (isSpeciesLocked(id)) {
     return `<span class="tt-name">${sp.name}</span>` +
            `<span class="tt-row"><span class="tt-label tt-cat-cause">Locked</span></span>` +
-           `<span class="tt-row">Not available in this scenario.</span>`;
+           `<span class="tt-row">Not available on the Cadet posting.</span>`;
   }
   return `<span class="tt-name">${sp.name}</span>` +
          `<span class="tt-row">${SPECIES_BLURB[id] || ''}</span>`;
@@ -2782,7 +2797,8 @@ function returnSeedToRack(idx) {
 /* Exit ---------------------------------------------------------------------- */
 function updateSeedBankExitButton() {
   const filled = gameState.tray.filter(Boolean).length;
-  setActionZone([{ label: `Done picking<br>${filled}/8`, onClick: exitSeedBank }]);
+  const label = gameState.run.seedBankSelectionComplete ? 'Back to hub' : `Done picking<br>${filled}/8`;
+  setActionZone([{ label, onClick: exitSeedBank }]);
 }
 
 /* Gatekeeper for the Done-picking button: ALWAYS confirms. With all 8 filled
@@ -2791,6 +2807,7 @@ function updateSeedBankExitButton() {
    mode. The actual leave happens in doExitSeedBank(). */
 function exitSeedBank() {
   const filled = gameState.tray.filter(Boolean).length;
+  if (gameState.run.seedBankSelectionComplete) { doExitSeedBank(); return; }   // mid-run browse — no confirm
   if (filled < 8) {
     shakeExitButton();
     setTimeout(() => openExitConfirm(filled), 420);   // let the shake play first
@@ -3142,6 +3159,8 @@ function updateSubstrateGuide(root) {
   // DONE when every plantable (seed) plant sits on a full spot. (A leftover
   // substrate-only spot can't block — if all seeds are full-placed, none half-set.)
   const done = eligibleCount > 0 && fullCount === eligibleCount;
+  const stressedSeed = !anyPlaced && gameState.tray.some(p => p && p.health > 0 && p.stage === 'seed' &&
+    (p.stressMarkers || []).some(m => m.kind === 'root-disease'));
 
   // Soft-lock tray plants that aren't seeds (already planted) — skip ones on a spot.
   syncTraySlotLocks((p, i) => lab.circles.some(c => c.slotIndex === i) ? null : stageLockReason('substrate', p, false));
@@ -3150,7 +3169,8 @@ function updateSubstrateGuide(root) {
   if (banner) {
     banner.innerHTML =
       done    ? 'All set — press Plant Seeds' :
-      !active ? (anyPlaced ? 'Choose a spot' : 'Choose a spot to begin') :
+      !active ? (stressedSeed ? 'A seed rejected its medium —<br>replant it somewhere kinder'
+               : anyPlaced ? 'Choose a spot' : 'Choose a spot to begin') :
       step === 'seed' ? 'Choose a seed for this spot' :
       step === 'edit' ? 'Choose a substrate<br>or choose a seed' :
                         'Choose a substrate for this spot';
@@ -3526,10 +3546,6 @@ const PIPE_TUNE = {
   yellowPad: 12,       // ± window outside a plant's target that still grades "near" (tolerated)
 };
 
-/* Wasted-water spray tunables (canvas particles). The DIAL setting (intensity
-   0-100) scales power (launch speed/distance), count, and life toward these
-   maxima; gravity/size/spread/fade are absolute. */
-const SPRAY_TUNE = { power: 6, gravity: 0.2, count: 70, life: 1800, size: 3, spread: 2.6, fade: 0.85 };
 
 /* --- flow resolver --------------------------------------------------------- */
 function portDialId(pid)  { return PIPE_TOPOLOGY.portDial[pid] || null; }
@@ -3907,6 +3923,16 @@ function portUsesSlot(idx) {
   return !!pm && Object.values(pm.ports).some(p => p.slotIndex === idx);
 }
 
+/* Water the current dials would draw beyond what the tank still holds (0 = fine). */
+function pipeShortfall() {
+  const pm = ensurePipeMazeState();
+  const flow = computePipeFlow(gameState);
+  const want = Object.keys(PIPE_PORTS).reduce((n, pid) => {
+    const si = pm.ports[pid].slotIndex, pl = si != null ? gameState.tray[si] : null;
+    return n + ((pl && pl.health > 0) ? flow[pid].fill : 0);
+  }, 0);
+  return Math.max(0, want - pm.tank);
+}
 function updatePipeGuide(root) {
   root = root || pipeScreen() || document;
   const pm = ensurePipeMazeState();
@@ -3935,7 +3961,8 @@ function updatePipeGuide(root) {
       resolved   ? 'Click each plant to<br>return it to the tray' :
       seeding    ? 'Choose a plant for this port' :
       !anyPlant  ? 'Click a port, then a plant' :
-                   'Set the dials, then Pressurize<br>(zero any empty pipe)';
+                   (pipeShortfall() ? 'Reservoir too low for those dials —<br>turn them down, then Pressurize'
+                                    : 'Set the dials, then Pressurize');
   }
 
   // Ports pulse: empty ones invite a plant (setup); grown ones invite a click home (resolved).
@@ -4104,55 +4131,6 @@ function burstAtGauge(pid) {
   particleBurst({ x: r.left + r.w / 2, y: r.top + 4, count: 22, color: '120,200,255' });
 }
 
-/* Wasted-water spray out an empty pipe's open end (no plant there). Origin = the
-   run's terminal fitting (the path's last point); intensity = the dial % drives
-   how hard/far it sprays. Lives on #stage (panel coords + 60px top-bar offset). */
-function sprayFromPort(pid, intensity) {
-  const path = Object.values(PIPE_PATHS).find(p => p.to === pid);
-  if (!path) return;
-  const end = path.points[path.points.length - 1];
-  particleSpray({ x: end[0], y: end[1] + 60, intensity: intensity || 0 });
-}
-
-/* Directional water spray: shoots out to the right and arcs down under gravity,
-   fading. Reusable (canvas on #stage, stage-local coords). */
-function particleSpray(opts = {}) {
-  const stage = document.getElementById('stage');
-  if (!stage) return;
-  const { x = 0, y = 0, intensity = 50, color = '127,212,255' } = opts;
-  const T = SPRAY_TUNE;
-  const frac  = Math.max(0.15, Math.min(1, intensity / 100));   // dial → 0.15..1
-  const count = Math.max(4, Math.round(T.count * frac));        // dial scales density
-  const life  = T.life * (0.45 + 0.55 * frac);                  // dial scales duration
-  const speed = T.power * frac;                                 // dial scales launch speed/distance
-  const cv = document.createElement('canvas');
-  cv.className = 'fx-burst';
-  cv.width = 1280; cv.height = 720;
-  stage.appendChild(cv);
-  const ctx = cv.getContext('2d');
-  const parts = Array.from({ length: count }, (_, i) => {
-    const fan = i / count - 0.5;                                // -0.5..0.5 vertical fan
-    return {
-      x, y,
-      vx: speed * (0.7 + ((i * 17) % 10) / 14),                 // rightward, out the pipe
-      vy: -T.spread * 0.5 + fan * T.spread,                     // upward fan, then gravity takes over
-      r: T.size * (0.7 + ((i * 7) % 6) / 8),
-    };
-  });
-  let t = 0;
-  function frame() {
-    t += 16;
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    const alpha = Math.max(0, 1 - t / life);
-    parts.forEach(p => {
-      p.vy += T.gravity; p.x += p.vx; p.y += p.vy;              // gravity arc
-      ctx.fillStyle = `rgba(${color},${(alpha * T.fade).toFixed(3)})`;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
-    });
-    if (t < life) requestAnimationFrame(frame); else cv.remove();
-  }
-  requestAnimationFrame(frame);
-}
 
 /* One-shot pressurize. Requires ALL FOUR ports filled (else shake + banner).
    Sequence: drain the tank by the 4 dial settings → water travels → (beat) gauges
@@ -4173,10 +4151,10 @@ function pressurize() {
   pm.phase = 'running';   // lock placement/dials/re-press during the animation
   pm.revealed = false;    // gauges stay blue until the water arrives (beat 1)
 
-  // Limited reservoir: EVERY port with a dial > 0 draws water — including empty
-  // ones, whose water sprays out the open pipe (wasted). Scale down if short.
+  // Limited reservoir: only ports holding a plant draw water (an empty pipe
+  // stays shut). If the tank can't cover the dials, every delivery scales down.
   const flow = computePipeFlow(gameState);
-  const active = ports.filter(pid => flow[pid].fill > 0);
+  const active = plantPorts.filter(pid => flow[pid].fill > 0);
   const requested = active.reduce((s, pid) => s + flow[pid].fill, 0);
   const avail = pm.tank;
   const scale = (requested > avail && requested > 0) ? (avail / requested) : 1;
@@ -4199,7 +4177,6 @@ function pressurize() {
   renderPipeMaze(gameState);              // tank drains + food updates now; gauges still blue
 
   const settle = animatePoweredFlow();
-  const sprayPorts = active.filter(pid => !isPlant(pid));   // empty pipes that wasted water
 
   // Beat 1 — water arrives: plant gauges reveal their grade; empty pipes spray.
   setTimeout(() => {
@@ -4210,7 +4187,6 @@ function pressurize() {
       if (g) { void g.offsetWidth; g.classList.add('flash-' + pm.ports[pid].grade); }
       if (pm.ports[pid].outcome === 'flood') burstAtGauge(pid);
     });
-    sprayPorts.forEach(pid => sprayFromPort(pid, delivered[pid]));
 
     // Beat 2 — the plants visibly grow one stage (all of them, good or bad).
     setTimeout(() => {
@@ -4296,7 +4272,7 @@ function tankTooltip() {
   return [
     `<span class="tt-name">Water Reservoir</span>`,
     tlv('water', 'Remaining', `${Math.round(pm.tank)} / ${pm.tankMax}`),
-    `<span class="tt-row">One tankful per run — over-watering wastes it.</span>`,
+    `<span class="tt-row">One tankful per run — only ports with a plant draw from it.</span>`,
     pct <= 20 ? `<span class="tt-row hub-unlock-hint">Running low!</span>` : '',
   ].join('');
 }
@@ -4317,8 +4293,13 @@ function pipeDialTooltip(id) {
 function portTooltip(id) {
   const pm = gameState.pipeMaze;
   const port = pm && pm.ports[id];
-  if (!port || !port.grade) return null;                   // suppressed until grown
+  if (!port) return null;
   const plant = port.slotIndex != null ? gameState.tray[port.slotIndex] : null;
+  if (!port.grade) {                                       // setup: what to do / who's here
+    if (!plant) return `<span class="tt-name">Port ${id.slice(1)}</span><span class="tt-row hub-unlock-hint">Click the port, then a plant in the tray.</span>`;
+    return `<span class="tt-name">${plant.name}</span>` + tlv('water', 'Water need', plant.waterNeed) +
+           `<span class="tt-row">Restrictor ${id.slice(1)} sets its water.</span><span class="tt-row hub-unlock-hint">Click ✕ to take it back</span>`;
+  }
   if (!plant) return null;
   const t = WATER_TARGET[plant.waterNeed] || WATER_TARGET.medium;
   const verdict = port.outcome === 'correct'   ? 'On target' :
@@ -5099,11 +5080,18 @@ function runCycle() {
       kind: 'wrong-spectrum', pipCost: specPip, deathCause: 'wrong-spectrum',
       detail: `Lit ${labelOf(spec)} — wants ${labelOf(plant.lightSpectrum)} (−${specPip}).`,
     });
+    if (photoState === 'near') {
+      const w = PHOTO_TARGET[truePhoto];
+      spot.pendingMarkers.push({                                       // pip-free: the tray still shows why yield halves
+        kind: 'wrong-spectrum', pipCost: 0, deathCause: 'wrong-spectrum',
+        detail: `${zoneHours(z)}h light — just outside this ${truePhoto} plant's ${w.lo}–${w.hi}h window. Weak bloom, half yield.`,
+      });
+    }
     if (photoState === 'miss') {
       const w = PHOTO_TARGET[truePhoto];
       spot.pendingMarkers.push({                                       // reuse the light-failure badge (covers spectrum OR day-length)
         kind: 'wrong-spectrum', pipCost: 1, deathCause: 'wrong-spectrum',
-        detail: `${zoneHours(z)}h light — a ${truePhoto} plant wants ${w.lo}–${w.hi}h. No flower, −1.`,
+        detail: `${zoneHours(z)}h light — a ${truePhoto} plant wants ${w.lo}–${w.hi}h. Weak bloom, half yield, −1.`,
       });
     }
 
@@ -5237,12 +5225,13 @@ function spotTooltip(id) {
     if (!pl) return null;
     // Planted: the deduction aids — visible spectrum + the family day-length rule
     // (a revealed trigger shows its real window instead).
-    const known = pl.revealed.includes('photoperiod') ? PHOTO_TARGET[photoperiodTriggerOf(pl)] : null;
+    const revealed = pl.revealed.includes('photoperiod');
+    const win = revealed ? PHOTO_TARGET[photoperiodTriggerOf(pl)] : null;
     return [
       `<span class="tt-name">${pl.name}</span>`,
       tlv('light', 'Spectrum', labelOf(pl.lightSpectrum)),
-      known ? tlv('revealed', 'Day-length', known ? `${known.lo}–${known.hi}h` : 'any')
-            : `<span class="tt-row">${FAMILY_PHOTOPERIOD_HINT[pl.spriteFamily]} Some species break the rule.</span>`,
+      revealed ? tlv('revealed', 'Day-length', win ? `${win.lo}–${win.hi}h` : 'any (day-neutral)')
+               : `<span class="tt-row">${FAMILY_PHOTOPERIOD_HINT[pl.spriteFamily]} Some species break the rule.</span>`,
       `<span class="tt-row hub-unlock-hint">Click ✕ to take back</span>`,
     ].join('');
   }
@@ -5260,8 +5249,8 @@ function spotTooltip(id) {
     const w = PHOTO_TARGET[photoperiodTriggerOf(plant)];   // truth — reveal lands on return
     lines.push(tlv('revealed', 'Day-length', `wants ${w ? w.lo + '–' + w.hi + 'h' : 'any'}, set ${zoneHours(z)}h`));
     const msg = spot.photoOutcome === 'bloom' ? 'Bloomed!'
-              : spot.photoOutcome === 'near'  ? 'No flower (just off)'
-              : 'No flower — wrong day-length';
+              : spot.photoOutcome === 'near'  ? 'Weak bloom (just off) — half yield'
+              : 'Weak bloom — wrong day-length, half yield, −1';
     const col = spot.photoOutcome === 'bloom' ? 'var(--accent-go)'
               : spot.photoOutcome === 'near'  ? 'var(--accent-warn)'
               : 'var(--accent-stop)';
@@ -5427,7 +5416,7 @@ function ensureMixingState() {
       phase: 'setup',        // 'setup' = place + tune ; 'running' = feeding ; 'resolved' = click home
       activeZone: null,      // 'Z1' selected to receive the next placed plant
       feedLog: null,         // step-by-step terminal lines during/after a Feed (null = show live mixes)
-      zones: Object.fromEntries(Object.keys(MIXING_DIALS).map(z => [z, { N: 50, P: 50, K: 50 }])),
+      zones: Object.fromEntries(Object.keys(MIXING_DIALS).map(z => [z, { N: 25, P: 25, K: 25 }])),   // start gentle — over costs double
       slots: {},             // 'Z1_0'.. → { slotIndex, graded, flash, outcome, offenders }
     };
     Object.keys(MIXING_TRAYS).forEach(z => [0, 1, 2].forEach(i => {
@@ -5645,7 +5634,7 @@ function renderMixTerminal(wrap) {
   } else {                                              // idle: per-tray group (# label + NPK line)
     el.innerHTML = Object.keys(MIXING_DIALS).map(z => {
       const m = mc.zones[z];
-      return `<div class="mix-grp"><div class="mix-tlabel">Tray&nbsp;${z.slice(1)}</div><div class="mix-tnpk">${mixReadingHTML(m)}</div></div>`;
+      return `<div class="mix-grp"><div class="mix-tlabel">Pan&nbsp;${z.slice(1)}</div><div class="mix-tnpk">${mixReadingHTML(m)}</div></div>`;
     }).join('');
   }
   // Font sizes + group gap are CSS-var driven (Devtools sliders); the quad warp
@@ -5669,9 +5658,9 @@ function updateMixGuide(root) {
       running    ? 'Feeding…' :
       allFed     ? 'All plants fed —<br>Back to hub' :
       resolved   ? 'Click each plant to<br>return it to the tray' :
-      seeding    ? 'Choose a plant for this tray' :
-      placed === 0 ? 'Click a feeding tray, then a plant' :
-                   'Set each tray’s N-P-K mix,<br>then Feed';
+      seeding    ? 'Choose a plant for this pan' :
+      placed === 0 ? 'Click a feeding pan, then a plant' :
+                   'Set each pan’s N-P-K mix,<br>then Feed';
   }
 
   root.querySelectorAll('.mix-tray').forEach(el => {
@@ -5823,7 +5812,7 @@ function feedZones() {
   mc.phase = 'running';
 
   const activeZones = Object.keys(MIXING_DIALS).filter(z => mixZoneLivingCount(z) > 0);
-  mc.feedLog = ['&gt; FEEDING'].concat(activeZones.map(z => `T${z.slice(1)} ${mixReadingHTML(mc.zones[z])}`));
+  mc.feedLog = ['&gt; FEEDING'].concat(activeZones.map(z => `P${z.slice(1)} ${mixReadingHTML(mc.zones[z])}`));
 
   const wrap = mixScreen();
   // Pipe feed animation: all pipes fill full together, hold (longer = more dosed),
@@ -5868,7 +5857,7 @@ function feedZones() {
   // Beat 1 — show the verdicts: terminal readout + flash.
   setTimeout(() => {
     // Terminal switches from "feeding" to a per-tray result readout.
-    mc.feedLog = ['&gt; RESULTS'].concat(activeZones.map(z => `Tray ${z.slice(1)}: ${zoneFeedResult(z) || '—'}`));
+    mc.feedLog = ['&gt; RESULTS'].concat(activeZones.map(z => `Pan ${z.slice(1)}: ${zoneFeedResult(z) || '—'}`));
     renderTray(gameState);
     renderMixingConsole(gameState);
     placedIds.forEach(id => {
@@ -5951,10 +5940,11 @@ function flyMixPlantsToTray(ids, done) {
 function dialTooltip(z, nu) {
   const v = gameState.mixingConsole.zones[z][nu];
   return [
-    `<span class="tt-name">${MIX_NUT_NAME[nu]} (${nu}) — Tray ${z.slice(1)}</span>`,
+    `<span class="tt-name">${MIX_NUT_NAME[nu]} (${nu}) — Pan ${z.slice(1)}</span>`,
     tlv('nutrient', 'Dose', `${v}`),
     `<span class="tt-row">${MIX_NUT_ROLE[nu]}</span>`,
     `<span class="tt-row">Dose ≈ hunger tier (light 25 · medium 50 · heavy 75), then skewed by growth stage: seedlings take about half, vegetative plants want more N, flowering plants want more P & K.</span>`,
+    `<span class="tt-row">Too much costs 2 pips (burn); too little costs 1 (deficiency). When unsure, go low.</span>`,
     `<span class="tt-row hub-unlock-hint">Drag: 0–100. The exact need stays hidden.</span>`,
   ].join('');
 }
@@ -5964,7 +5954,7 @@ function zoneTooltip(z) {
   if (mc.phase === 'setup') {
     const m = mc.zones[z], n = mixZoneLivingCount(z);
     return [
-      `<span class="tt-name">Feeding Tray ${z.slice(1)}</span>`,
+      `<span class="tt-name">Feeding Pan ${z.slice(1)}</span>`,
       `<span class="tt-row">Mix: N ${m.N} · P ${m.P} · K ${m.K}</span>`,
       `<span class="tt-row">${n}/3 plants — all share this one mix.</span>`,
       `<span class="tt-row hub-unlock-hint">Click to select, then click a plant.</span>`,
@@ -6301,7 +6291,7 @@ function updateOrientGuide(root) {
       resolved   ? 'Click each plant to<br>return it to the tray' :
       selecting  ? 'Choose a plant for this tube' :
       placed === 0 ? 'Click a tube, then a plant' :
-                   'Rotate each shoot UP,<br>then Confirm Orientations';
+                   'Rotate until each screen says OK<br>(some plants won’t care), then Confirm';
   }
 
   root.querySelectorAll('.orient-tube').forEach(el => {
@@ -6530,6 +6520,7 @@ function orientTubeTooltip(t) {
     tlv('revealed', 'Gravity', labelOf(resp)),
     `<span class="tt-row">${ORIENT_RESPONSE_DESC[resp]}</span>`,
     `<span class="tt-row"><b style="color:${col};">${verdict}</b></span>`,
+    resp === 'strict' ? `<span class="tt-row" style="color:var(--accent-warn);">Strict roots struggle in the Solution Tank (−1 there).</span>` : '',
     `<span class="tt-row hub-unlock-hint">Click to return to tray</span>`,
   ].join('');
 }
@@ -6995,7 +6986,7 @@ function hydroLockIn() {
     const markers = [];
     if (lockout) markers.push({ kind: 'ph-lockout', pipCost: 2, deathCause: 'ph-lockout', detail: `pH ${chan.ph.toFixed(1)} outside the safe 5–9 band — nutrient lockout (−2).` });
     if (ecHigh)  markers.push({ kind: 'nutrient-burn', pipCost: 1, deathCause: 'nutrient-burn', detail: `EC ${chan.ec.toFixed(1)} too high — salt stress (−1).` });
-    if (strict)  markers.push({ kind: 'disorientation', pipCost: 1, deathCause: 'disorientation', detail: 'Gravity-dependent roots — reduced hydroponic uptake (−1).' });
+    if (strict)  markers.push({ kind: 'gravity-roots', pipCost: 1, deathCause: 'gravity-roots', detail: 'Strict gravitropic — its roots need a “down” to grow by; floating in solution they underperform (−1).' });
 
     const thrive = !lockout && inPhBand && ecInBand && !strict;
     pot.graded = true;
@@ -7042,7 +7033,10 @@ function returnHydroPlant(k) {
   flyHydroPlantToTray(k, () => {
     pot.slotIndex = null; pot.graded = false; pot.flash = null; pot.outcome = null;
     pot.pendingReveal = null; pot.pendingMarkers = []; pot.pendingThrive = false;
-    if (!HYDRO_ALL_POTS.some(x => hb.pots[x].graded)) hb.phase = 'setup';   // batch done → next batch
+    if (!HYDRO_ALL_POTS.some(x => hb.pots[x].graded)) {   // batch done → fresh solution for the next one
+      hb.phase = 'setup';
+      hb.channels = { back: { ph: HYDRO_TUNE.startPh, ec: HYDRO_TUNE.startEc }, front: { ph: HYDRO_TUNE.startPh, ec: HYDRO_TUNE.startEc } };
+    }
     renderHydroponicBay(gameState);
   });
 }
@@ -7232,7 +7226,7 @@ const RAD_SHIELD_WORD = { 0: 'None', 1: 'Moderate', 2: 'Good', 3: 'Excellent' };
 const RAD_TYPE_ORDER = ['uv', 'particle', 'gamma'];
 const RAD_TYPES = {
   uv:       { label: 'UV Burst',       dose: 2, icon: 'radiation-uv',       color: '170,120,255',
-              bio: 'Ultraviolet — scorches leaf-surface cells and DNA. Almost any opaque shield blocks it.' },
+              bio: 'Ultraviolet — scorches leaf-surface cells and DNA. The mildest event; a decent shield or a tough plant shrugs it off.' },
   particle: { label: 'Particle Storm', dose: 3, icon: 'radiation-particle', color: '120,200,255',
               bio: 'Solar energetic particles (protons) — penetrating. Hydrogen-rich shields stop them best.' },
   gamma:    { label: 'Gamma Flare',    dose: 3, icon: 'radiation-gamma',    color: '150,255,150',
@@ -7856,11 +7850,11 @@ function radBracketTooltip(k) {
     return `<span class="tt-name">Bay ${k + 1} shield</span><span class="tt-row hub-unlock-hint">${hint}</span>`;
   }
   const m = RAD_MATERIALS[mk];
-  const rating = rd.known[mk] ? RAD_SHIELD_WORD[m.shield] : 'Unknown';
+  const known = !!rd.known[mk];
   return [
     `<span class="tt-name">${m.label}</span>`,
-    tlv('water', 'Shielding', rating),
-    `<span class="tt-row">${m.bio}</span>`,
+    tlv('water', 'Shielding', known ? RAD_SHIELD_WORD[m.shield] : 'Unknown'),
+    known ? `<span class="tt-row">${m.bio}</span>` : '',
     `<span class="tt-row hub-unlock-hint">Click to change the shield</span>`,
   ].join('');
 }
@@ -7868,12 +7862,12 @@ function radRackTooltip(mk) {
   const rd = gameState.radiationDome;
   if (!rd) return null;
   const m = RAD_MATERIALS[mk];
-  const rating = rd.known[mk] ? RAD_SHIELD_WORD[m.shield] : 'Unknown — deduce it';
+  const known = !!rd.known[mk];
   const canFit = rd.phase === 'setup' && radShieldTargetBay() != null;
   return [
     `<span class="tt-name">${m.label}</span>`,
-    tlv('water', 'Shielding', rating),
-    `<span class="tt-row">${m.bio}</span>`,
+    tlv('water', 'Shielding', known ? RAD_SHIELD_WORD[m.shield] : 'Unknown — test it'),
+    known ? `<span class="tt-row">${m.bio}</span>` : `<span class="tt-row">Fit it over a bay and run an exposure to learn how well it blocks.</span>`,
     canFit ? `<span class="tt-row hub-unlock-hint">Click to fit this shield above the bay</span>` : '',
   ].join('');
 }
@@ -9053,16 +9047,17 @@ const HARV_PRODUCE = {
 
 /* Stress-marker kind → room label (end-of-run failure chart). */
 const HARV_FAIL_ROOM = {
-  'root-disease':       'Substrate',
+  'root-disease':       'Substrate Lab',
   'flood':              'Pipe Maze',
   'drought':            'Pipe Maze',
   'wrong-spectrum':     'Light Lab',
-  'nutrient-burn':      'Mixing',
-  'deficiency':         'Mixing',
-  'disorientation':     'Orientation',
-  'ph-lockout':         'Hydroponics',
-  'dna-damage':         'Radiation',
-  'missed-pollination': 'Pollination',
+  'nutrient-burn':      'Mixing Console',
+  'deficiency':         'Mixing Console',
+  'disorientation':     'Orientation Chamber',
+  'gravity-roots':      'Solution Tank',
+  'ph-lockout':         'Solution Tank',
+  'dna-damage':         'Radiation Dome',
+  'missed-pollination': 'Pollination Dome',
 };
 
 /* --- geometry helpers -------------------------------------------------------- */
@@ -9279,12 +9274,11 @@ function harvSyncActions() {
       : [{ label: 'Back to hub', onClick: exitHarvestBay }]);
   } else if (hb.phase === 'running') {
     setActionZone([{ label: 'Collecting…', onClick: shakeActionButton }]);
+  } else if (harvRunOver()) {
+    // The run is over (quota met, or every plant spent) — the summary is the only way forward.
+    setActionZone([{ label: 'View Run Summary', onClick: openRunSummary }]);
   } else {
-    const btns = [];
-    if (harvRunOver())
-      btns.push({ label: 'View Run Summary', onClick: openRunSummary });
-    btns.push({ label: 'Return to hub', onClick: exitHarvestBay });
-    setActionZone(btns);
+    setActionZone([{ label: 'Return to hub', onClick: exitHarvestBay }]);
   }
 }
 function harvUpdateBanner(rootEl) {
@@ -9300,7 +9294,7 @@ function harvUpdateBanner(rootEl) {
   } else if (hb.phase === 'running') {
     msg = 'Collecting produce…';
   } else if (gameState.run.colonyFood >= gameState.run.colonyQuota) {
-    msg = `QUOTA MET — the colony is fed! (+${hb.totalUnits} food)`;
+    msg = `QUOTA MET — the colony is fed! (+${hb.totalUnits} food) · run complete`;
   } else if (harvRunOver()) {
     msg = 'Run complete — view the summary';
   } else {
@@ -9551,6 +9545,7 @@ const HARV_TAKEAWAYS = {
   'nutrient-burn':   { icon: 'badge-nutrient-burn',      line: '<b>More fertilizer is not better.</b> Excess nutrients pull water OUT of roots and burn them.' },
   'deficiency':      { icon: 'badge-deficiency',         line: '<b>N, P and K do different jobs.</b> Nitrogen builds leaves, phosphorus roots and fruit, potassium overall health.' },
   'disorientation':  { icon: 'badge-root-disease',       line: '<b>Plants sense gravity.</b> Roots grow down, shoots grow up — and some plants can\'t recover from being flipped.' },
+  'gravity-roots':   { icon: 'badge-gravity-response',   line: '<b>Not every crop suits a tank.</b> Strict-gravity plants want a solid medium to root against; the water-culture winners are the flexible ones.' },
   'ph-lockout':      { icon: 'death-ph-lockout',         line: '<b>pH is the gatekeeper.</b> At the wrong pH, nutrients are present in the water but LOCKED away from the plant.' },
   'dna-damage':      { icon: 'badge-dna-damage',         line: '<b>Radiation shreds DNA.</b> And plain water is a surprisingly good shield — real Mars habitat designs put water tanks overhead.' },
   'missed-pollination': { icon: 'death-missed-pollination', line: '<b>No pollination, no fruit.</b> Flowers aren\'t decoration — they\'re a job posting for pollen carriers.' },
@@ -9571,7 +9566,7 @@ const HARV_FACTS = [
 function hsFailureData() {
   const counts = {}, kinds = new Set();
   const tally = p => (p.stressMarkers || []).forEach(m => {
-    const room = HARV_FAIL_ROOM[m.kind] || 'Other';
+    const room = m.room || HARV_FAIL_ROOM[m.kind] || 'Other';
     counts[room] = (counts[room] || 0) + 1;
     kinds.add(m.kind);
   });
@@ -9685,7 +9680,8 @@ function hsBuildColony(body) {
   const won = run.colonyFood >= run.colonyQuota;
   const rank = hsRunRank();
   const traitsFound = planted.reduce((n, p) => n + (p.revealed || []).length, 0);
-  const traitsMax = planted.length * 5;
+  const radOn = !!(DIFFICULTY[run.difficulty] && DIFFICULTY[run.difficulty].radiation);
+  const traitsMax = planted.length * (radOn ? 5 : 4);   // radiation is only discoverable on Specialist
   const net = (run.foodEarned || 0) - (run.foodSpent || 0);
   const fact = HARV_FACTS[((run.actionCount || 0) + planted.length) % HARV_FACTS.length];
 
@@ -10289,7 +10285,7 @@ const TUTORIALS = {
     { shapes: [], box: { x: 474, y: 231 },
       text: '<b>WELCOME TO STARSEED STATION.</b><br>The colony is counting on you: raise 8 crop plants through the station\'s science rooms and harvest enough food to hit quota.' },
     { shapes: [{ el: '.tb-food' }],
-      text: '<b>COLONY FOOD</b> is your budget AND your goal. Every room action costs 1 food. Reach the quota to win — if food hits 0 with nothing ripe to harvest, the colony starves.' },
+      text: '<b>COLONY FOOD</b> is your budget AND your goal. Every room action costs 1 food. Reach the quota and the run is won (it ends there) — if food hits 0 with nothing ripe to harvest, the colony starves.' },
     { shapes: [{ el: '#tray' }],
       text: 'Your plants ride here in <b>THE TRAY</b> — on every screen, always. Green pips are health; badges appear as you discover each plant\'s hidden traits.' },
     { shapes: [{ rect: { x: 495, y: 216, w: 288, h: 220 } }],
@@ -10299,21 +10295,21 @@ const TUTORIALS = {
     { shapes: [{ rect: { x: 210, y: 150, w: 826, h: 358 } }], box: { x: 378, y: 538 }, w: 520,
       text: 'Seed packets show a species\' <b>VISIBLE traits</b> — water, light, appetite, pollination. The rest stay hidden until you experiment in the rooms.' },
     { shapes: [{ el: '#tray' }],
-      text: 'Click a packet to study it, then plant it into a tray slot. Fill all <b>8 slots</b>, then head back to the hub to begin the run.' },
+      text: 'Click a packet to study it, then <b>Take It</b> to plant it in a tray slot (click the slot to put it back). Fill all <b>8 slots</b>, then press <b>Done picking</b> to begin the run.' },
   ],
   substrate: [
     { shapes: [],
       text: '<b>SUBSTRATE LAB</b> — what are we growing in? Space farms can\'t haul soil from Earth, so you pick each plant\'s growing medium.' },
     { shapes: [{ rect: { x: 217, y: 386, w: 797, h: 180 } }],
-      text: 'Choose a spot, then a <b>SUBSTRATE</b>, then a seed. A wrong medium stresses roots — each plant\'s preference is learned by trying.' },
+      text: 'Choose a spot, then a <b>SUBSTRATE</b>, then a seed. A wrong medium stresses roots — each plant\'s preference is learned by trying. Want the Solution Tank later? Plant at least one water-loving seed in <b>Agar Gel</b>.' },
     { shapes: [{ el: '.action-zone' }], box: { x: 730, y: 517 },
-      text: '<b>PLANT SEEDS</b> runs the experiment. It costs 1 food, and every participating plant grows one stage.' },
+      text: '<b>PLANT SEEDS</b> runs the experiment for 1 food. Plants that take to their medium grow one stage; a wrong medium costs a pip and leaves the seed unplanted — replant it somewhere kinder.' },
   ],
   water: [
     { shapes: [],
       text: '<b>PIPE MAZE</b> — water the crops from the station\'s recycled supply. Drought AND flood both hurt: match each plant\'s thirst.' },
     { shapes: [{ rect: { x: 80, y: 310, w: 150, h: 215 } }],
-      text: 'The <b>WATER RESERVOIR</b> is your whole run\'s supply — the counter shows what\'s left, and every drop you send is gone for good.' },
+      text: 'The <b>WATER RESERVOIR</b> is your whole run\'s supply — the counter shows what\'s left, and every drop you send to a plant is gone for good.' },
     { shapes: [{ circle: { cx: 723, cy: 178, r: 42 } }, { circle: { cx: 723, cy: 296, r: 42 } },
                { circle: { cx: 723, cy: 470, r: 42 } }, { circle: { cx: 723, cy: 577, r: 42 } }],
       box: { x: 800, y: 300 },
@@ -10338,15 +10334,15 @@ const TUTORIALS = {
       box: { x: 450, y: 300 }, line: false,
       text: 'The <b>24-HOUR DIAL</b> sets each zone\'s day-length. Some plants only flower at the right hours: tall stalks like long days, root crops short days, most others don\'t care. Hover a placed plant for its family\'s rule — a few species break it.' },
     { shapes: [{ el: '.action-zone' }],
-      text: '<b>RUN LIGHT CYCLE</b>: 1 food, and participating plants grow a stage.' },
+      text: '<b>RUN CYCLE</b>: 1 food, and participating plants grow a stage.' },
   ],
   nutrients: [
     { shapes: [], box: { x: 481, y: 265 },
-      text: '<b>MIXING CONSOLE</b> — fertilizer chemistry. N-P-K: nitrogen for leaves, phosphorus for roots, potassium for fruit.' },
+      text: '<b>MIXING CONSOLE</b> — fertilizer chemistry. N-P-K: nitrogen for leaves, phosphorus for roots & fruit, potassium for overall health.' },
     { shapes: [{ rect: { x: 230, y: 422, w: 214, h: 70 } }, { rect: { x: 524, y: 422, w: 218, h: 70 } },
                { rect: { x: 824, y: 422, w: 216, h: 70 } }],
       box: { x: 480, y: 200 }, line: false,
-      text: 'Each feeding zone mixes ONE recipe with its three <b>N-P-K DIALS</b>. Group plants with similar <b>APPETITE</b> and <b>GROWTH STAGE</b> into a zone — seedlings want a light dose, vegetative plants extra N, flowering plants extra P-K. Underfeeding causes deficiency; overfeeding BURNS roots.' },
+      text: 'Each feeding pan mixes ONE recipe with its three <b>N-P-K DIALS</b>. Group plants with similar <b>APPETITE</b> and <b>GROWTH STAGE</b> into a pan — seedlings want a light dose, vegetative plants extra N, flowering plants extra P-K. Too little = deficiency (−1); too much BURNS (−2). Start low.' },
     { shapes: [{ el: '.action-zone' }], box: { x: 731, y: 531 },
       text: '<b>FEED</b> delivers the batch. This is a boost room — it costs 1 food, but plants do NOT age here.' },
   ],
@@ -10360,13 +10356,13 @@ const TUTORIALS = {
   ],
   hydroponics: [
     { shapes: [], box: { x: 494, y: 194 },
-      text: '<b>HYDROPONIC BAY</b> — soil-free growing in nutrient water. Only plants raised on <b>AGAR GEL</b> with a known gravity response may enter.' },
+      text: '<b>SOLUTION TANK</b> — soil-free growing in nutrient water. Only plants grown in <b>AGAR GEL</b> may enter.' },
     { shapes: [{ rect: { x: 346, y: 135, w: 174, h: 159 } }, { rect: { x: 778, y: 135, w: 171, h: 159 } }],
       box: { x: 493, y: 317 }, line: false,
       text: 'Each channel\'s wall gauges track <b>pH</b> and <b>EC</b>. pH = how acidic or alkaline the water is — too far off and roots can\'t take up nutrients at all. EC = how concentrated those nutrients are.' },
     { shapes: [{ rect: { x: 555, y: 319, w: 193, h: 64 } }, { rect: { x: 515, y: 473, w: 275, h: 78 } }],
       box: { x: 205, y: 283 }, line: false,
-      text: 'Each channel has its own set of <b>adjustment buttons</b> — tap them to nudge that channel\'s pH and EC, and watch the gauges respond.' },
+      text: 'Each channel has its own <b>adjustment buttons</b>: pH goes up or down, but EC only goes UP — add nutrient a tap at a time and watch the gauge. The solution resets after each batch.' },
     { shapes: [{ el: '.action-zone' }], box: { x: 728, y: 551 },
       text: '<b>LOCK IN</b> commits your tune-up. Boost room: 1 food, no aging.' },
   ],
@@ -10380,7 +10376,7 @@ const TUTORIALS = {
     { shapes: [{ poly: [[79, 120], [203, 149], [204, 507], [79, 543]] }], box: { x: 234, y: 232 },
       text: 'Then pick a <b>SHIELD MATERIAL</b> from the wall rack to cover that bay. Materials block different amounts — water and regolith are the surprise champions.' },
     { shapes: [{ el: '.action-zone' }], box: { x: 723, y: 517 },
-      text: '<b>RUN EXPOSURE</b> fires the source and reveals radiation tolerance. Unshielded bays are a gamble.' },
+      text: '<b>RUN EXPOSURE</b> fires the source and reveals each plant\'s radiation tolerance. Every seated bay needs a shield — the weak ones are the gamble.' },
   ],
   pollination: [
     { shapes: [], box: { x: 480, y: 282 },
@@ -10392,15 +10388,15 @@ const TUTORIALS = {
       box: { x: 486, y: 369 }, line: false,
       text: 'Every plant gets a <b>BLOOM TIMER</b> — the ring above it drains green → amber → red while its flower is open. Pollinate before it empties: a bloom that closes unpollinated sets <b>NO fruit, ever</b>.' },
     { shapes: [{ poly: [[30, 161], [102, 175], [102, 457], [30, 469]] }], w: 400,
-      text: 'Three <b>TOOLS</b>, one per pollinator type. <b>Brush</b> — click it, then a self-pollinating bloom. <b>Bee-Bot</b> — click insect blooms to queue a flight. <b>Fan</b> — mounts above the bench and gusts the wind blooms. Wrong tool, no effect.' },
+      text: 'Three <b>TOOLS</b>, one per pollinator type. <b>Brush</b> — click it, then a self-pollinating bloom. <b>Bee-Bot</b> — click it to wake it, then click insect blooms; more clicks add stops. <b>Fan</b> — click it, then click the wall band above the bench; it gusts the wind blooms in range. Wrong tool, no effect.' },
     { shapes: [{ el: '.action-zone' }], box: { x: 730, y: 551 },
       text: '<b>BEGIN</b> starts every timer at once. Miss a bloom and that plant sets NO fruit — ever.' },
   ],
   'center-harvest': [
     { shapes: [], box: { x: 477, y: 203 },
-      text: '<b>HARVEST ROOM</b> — payday. Ripe plants send their produce down the chute, and the colony meter fills.' },
+      text: '<b>HARVEST BAY</b> — payday. Ripe plants send their produce down the chute, and the colony meter fills.' },
     { shapes: [{ el: '.action-zone' }], box: { x: 730, y: 499 },
-      text: '<b>COLLECT HARVEST</b> cashes out every harvestable plant — free, no aging. Yield = health × pollination × light care. Hit quota and the colony eats.' },
+      text: '<b>COLLECT HARVEST</b> cashes out every ripe plant — free, no aging. Yield = health × pollination × light care. Hit quota and the colony eats — that ends the run, so ripen as many plants as you can first.' },
   ],
 };
 

@@ -1537,7 +1537,7 @@ body.anchor-tuning-mode .hub-status-icon:active { cursor: grabbing; }
    "planted" tag, so it reads as unavailable until put back. */
 .slot.sub-used .plant-clip { opacity: 0.4; filter: grayscale(0.5); }
 .slot.sub-used::after {
-  content: 'PLANTED';
+  content: 'ON BENCH';
   position: absolute;
   left: 50%; bottom: var(--sub-used-bottom, 21px);
   transform: translateX(-50%);
