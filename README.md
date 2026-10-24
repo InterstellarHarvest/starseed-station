@@ -87,7 +87,7 @@ to Master Agronomist, then start a new run and do it better.
 
 - **Cadet** — a first posting. Generous rations and a curated seed rack.
 - **Commander** — the standard run.
-- **Specialist** — deep space. Tight rations, a higher quota, and the Radiation Dome online.
+- **Specialist** — deep space. Tight rations, the Radiation Dome online, and solar storms that test every shield you fitted.
 
 ## Made for the classroom
 

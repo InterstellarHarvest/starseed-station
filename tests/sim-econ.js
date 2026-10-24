@@ -6,7 +6,7 @@
    Costs: 3 grow actions per batch (substrate/water/light, batches of up to 8/4/9),
    1 pollination session, optional boost rooms. Failure odds per room are the
    profile. Re-run this when quotas, pip costs or base yield change. */
-const DIFF = { cadet: { food: 95, quota: 130 }, commander: { food: 80, quota: 110 }, specialist: { food: 60, quota: 120, storms: true } };
+const DIFF = { cadet: { food: 95, quota: 120 }, commander: { food: 80, quota: 110 }, specialist: { food: 60, quota: 110, storms: true } };
 const PROFILES = {
   perfect: { substrateStress: 0,    waterFar: 0,    waterNear: 0,   specWrong: 0,    photoMiss: 0,   photoNear: 0,   pollMiss: 0,    boosts: 0, boostFail: 0,   stormShield: 1 },
   good:    { substrateStress: 0.05, waterFar: 0.05, waterNear: 0.2, specWrong: 0.05, photoMiss: 0.1, photoNear: 0.2, pollMiss: 0.05, boosts: 1, boostFail: 0.2, stormShield: 0.75 },

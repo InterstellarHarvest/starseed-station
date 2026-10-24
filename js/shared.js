@@ -10030,13 +10030,15 @@ const DIFFICULTY = {
   // Quota pass 2026-10-24: the run ends the moment quota is met, so the quota
   // must sit far enough above start food that a single early harvest can't end
   // the game (cadet used to finish after ONE plant). Max yield is 80 (8 × 10).
-  //  · cadet 95/130 — needs ~45 yield after ~8 actions: about five healthy plants.
-  //  · commander 80/110 — needs ~40 yield: a typical full run wins, a sloppy one loses.
-  //  · specialist 60/120 — needs ~70 of the 80 possible: near-flawless husbandry.
+  // Tuned with tests/sim-econ.js (win rate by player profile):
+  //  · cadet 95/120 — typical play wins ~75%, sloppy ~5%: training wheels, but a
+  //    single early harvest can't end the run.
+  //  · commander 80/110 — good play wins, typical ~60%, sloppy loses.
+  //  · specialist 60/110 — storms in play: perfect wins, good ~40%, typical loses.
   cadet: {
     label: 'CADET', sub: 'first posting', rgb: '0, 255, 136',
-    food: 95, quota: 130, lockedSpecies: [9, 13, 16, 18], radiation: false,
-    lines: ['Start 95 food', 'Quota 130', 'Limited seeds', 'No storms'],
+    food: 95, quota: 120, lockedSpecies: [9, 13, 16, 18], radiation: false,
+    lines: ['Start 95 food', 'Quota 120', 'Limited seeds', 'No storms'],
   },
   commander: {
     label: 'COMMANDER', sub: 'the standard run', rgb: '255, 204, 0',
@@ -10045,8 +10047,8 @@ const DIFFICULTY = {
   },
   specialist: {
     label: 'SPECIALIST', sub: 'deep-space posting', rgb: '255, 68, 85',
-    food: 60, quota: 120, lockedSpecies: [], radiation: true,
-    lines: ['Start 60 food', 'Quota 120', 'Radiation Dome online', 'Solar storms hit the hub'],
+    food: 60, quota: 110, lockedSpecies: [], radiation: true,
+    lines: ['Start 60 food', 'Quota 110', 'Radiation Dome online', 'Solar storms hit the hub'],
   },
 };
 
