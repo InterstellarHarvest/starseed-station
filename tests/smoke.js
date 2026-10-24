@@ -44,7 +44,7 @@ ok(missing.length === 0, 'every ASSETS path exists on disk' + (missing.length ? 
   await page.goto(url); await page.waitForTimeout(400);
   const ev = (fn, ...a) => page.evaluate(fn, ...a);
   const wait = ms => page.waitForTimeout(ms);
-  const until = (fn, t = 20000) => page.waitForFunction(fn, null, { timeout: t });
+  const until = (fn, t = 20000, pg = page) => pg.waitForFunction(fn, null, { timeout: t });
 
   await ev(() => { startNewRun('commander'); gameState.run.tutorialSkipAll = true; document.querySelector('.startup-layer').remove(); });
   ok(await ev(() => gameState.run.colonyQuota === 110 && gameState.run.colonyFood === 80), 'commander starts 80 / 110');
@@ -184,6 +184,49 @@ ok(missing.length === 0, 'every ASSETS path exists on disk' + (missing.length ? 
     await pg.evaluate(() => returnWateredPlant('P1')); await pg.waitForTimeout(600);
     const after = await pg.evaluate(() => ({ health: gameState.tray[3].health, drought: gameState.tray[3].badges.some(b => b.kind === 'drought') }));
     ok(after.health === 4 && after.drought, 'reload mid-Pressurize: the drought penalty still lands on click-home');
+    await ctx.close();
+  }
+
+  // --- regression guards from the bug audit ------------------------------------
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+    const pg = await ctx.newPage(); hook(pg);
+    await pg.goto(url); await pg.waitForTimeout(400);
+    // Substrate: a double Plant Seeds press must resolve once.
+    await pg.evaluate(() => {
+      startNewRun('commander'); gameState.run.tutorialSkipAll = true; document.querySelector('.startup-layer').remove();
+      [2, 1, 8, 10].forEach((id, i) => { gameState.tray[i] = createPlant(id, i); });
+      gameState.run.seedBankSelectionComplete = true; unlockRoom('substrate', { animate: false });
+      transitionTo('room:substrate', 'up-left');
+    });
+    await pg.waitForTimeout(400);
+    const food = await pg.evaluate(() => { substrateCircleClick(0); substrateSelectSub('perlite'); substrateTraySeedClick(1); plantSeeds(); plantSeeds(); plantSeeds(); return gameState.run.colonyFood; });
+    ok(food === 79, 'substrate: triple-clicking Plant Seeds charges once');
+    const left = await pg.evaluate(() => { exitSubstrateLab(false); return gameState.ui.currentScreen; });
+    ok(left === 'room:substrate', 'substrate: Back to hub refused while the batch resolves');
+    await pg.waitForTimeout(1600);
+    ok(await pg.evaluate(() => gameState.tray[1].stage === 'sprout' && gameState.ui.currentScreen === 'room:substrate' && gameState.moduleState.substrate.status === 'ready'), 'substrate: one aging, still in the room (seeds remain)');
+    // Pollination: session closes, reload before any click-home → dome must still open.
+    await pg.evaluate(() => {
+      exitSubstrateLab(false);
+    });
+    await pg.waitForTimeout(500);
+    await pg.evaluate(() => {
+      gameState.tray.forEach(p => { if (p) { p.stage = 'flowering'; p.actionAge = 3; } });
+      unlockRoom('pollination', { animate: false }); transitionTo('room:pollination', 'left');
+    });
+    await pg.waitForTimeout(400);
+    await pg.evaluate(() => { POLL_TUNE.selfSec = POLL_TUNE.insectSec = POLL_TUNE.windSec = 5; POLL_TUNE.jitterSec = 0; pollBegin(); Object.keys(gameState.pollinationDome.spots).forEach(i => pollPollinate(+i)); });
+    await until(() => gameState.pollinationDome.phase === 'resolved', 20000, pg);
+    await pg.reload(); await pg.waitForTimeout(500);
+    await pg.click('.startup-btn.primary'); await pg.waitForTimeout(1200);
+    await pg.evaluate(() => transitionTo('room:pollination', 'left')); await pg.waitForTimeout(500);
+    ok(await pg.evaluate(() => document.querySelector('.poll-screen .room-banner').textContent.includes('pollinated')), 'pollination: reload after session close reopens the dome with its tally');
+    // Unlock re-derivation: wipe an unlock from the save, Continue, it comes back.
+    await pg.evaluate(() => { const s = JSON.parse(localStorage.getItem('starseed-station-save')); s.moduleState.substrate.status = 'complete'; s.moduleState.orientation.status = 'locked'; localStorage.setItem('starseed-station-save', JSON.stringify(s)); });
+    await pg.reload(); await pg.waitForTimeout(500);
+    await pg.click('.startup-btn.primary'); await pg.waitForTimeout(1200);
+    ok(await pg.evaluate(() => gameState.moduleState.orientation.status === 'ready'), 'load: a lost Orientation unlock is re-derived from a complete Substrate Lab');
     await ctx.close();
   }
 

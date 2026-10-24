@@ -410,7 +410,6 @@ const gameState = {
   seedBank: {
     available: Object.keys(SPECIES).map(Number),
     locked: [],
-    familyRows: FAMILY_ROWS,
     rackLayout: null,   // resolved per-run packet scatter (rolled on first Seed Bay visit)
   },
   tray: [null, null, null, null, null, null, null, null],
@@ -460,7 +459,6 @@ function createPlant(speciesId, slotIndex) {
     maxHealth: 5,
     actionAge: 0,   // +1 per *successful* room action — see project_starseed_station memory
     stage: 'seed',
-    flowered: false,
     pollinated: false,
 
     // Visible traits (copied from species)
@@ -485,7 +483,6 @@ function createPlant(speciesId, slotIndex) {
     revealed:       [],
     badges:         [],
     stressMarkers: [],
-    moduleHistory: [],
   };
 }
 
@@ -518,6 +515,7 @@ let _mouseDown = false;        // suppress tooltips during drag
 // the press even if a child stops propagation.
 document.addEventListener('mousedown', () => { _mouseDown = true; hideTooltip(); }, true);
 document.addEventListener('mouseup',   () => { _mouseDown = false; }, true);
+window.addEventListener('blur', () => { _mouseDown = false; });   // drag released off-window
 
 function _ensureTooltipEl() {
   if (_tooltipEl) return _tooltipEl;
@@ -1097,7 +1095,6 @@ function openAutopsyReview() {
   // ESC to close
   const escHandler = e => { if (e.key === 'Escape') closeAutopsyReview(); };
   document.addEventListener('keydown', escHandler);
-  modal.dataset.escHandler = '1';
   modal._escHandler = escHandler;
 }
 
@@ -1489,7 +1486,6 @@ function agePlant(plant) {
   const from = plant.stage;
   plant.actionAge = (plant.actionAge || 0) + 1;
   plant.stage = GROWTH_STAGES[Math.min(plant.actionAge, GROWTH_STAGES.length - 1)];
-  if (plant.stage === 'flowering') plant.flowered = true;
   if (from !== plant.stage) onStageAdvanced(plant, from, plant.stage);
   autosave();
   return { from, to: plant.stage };
@@ -1755,7 +1751,6 @@ const UNLOCK_FADE_MS = 800;   // matches --unlock-fade-period in shared.css
    The full gameplay-flow helpers (markComplete, unlockRoomDelayed) live below
    unlockRoom and are used by later room demos to chain "this room done → next
    room unlocks with animation" on return-to-hub. */
-const ROOM_STATUSES = ['locked', 'unlocking', 'ready', 'in-progress', 'complete'];
 
 /* Reset hub-related state to "fresh run" — every module room locked. Center is
    always implicitly available (it isn't in moduleState; centerRoom.mode drives
@@ -1834,7 +1829,7 @@ function unlockRoomDelayed(key, delayMs) {
 }
 
 /* Generic status setter — direct write, no transition. Used by Devtools and by
-   scenario init. Pass any value in ROOM_STATUSES. */
+   scenario init. */
 function setRoomStatus(key, status) {
   const m = gameState.moduleState[key];
   if (!m) return;
@@ -2083,7 +2078,7 @@ function transitionTo(screenId, dir) {
   if (!panel) return;
   const hub = document.getElementById('hub-layer');
   if (!hub) return;
-  if (_transitionBusy) return;
+  if (_transitionBusy) return false;
   _transitionBusy = true;
   setTimeout(() => { _transitionBusy = false; }, SLIDE_MS);
 
@@ -2148,7 +2143,12 @@ function transitionTo(screenId, dir) {
     gameState.ui.currentScreen = 'hub';
     onHubArrival();   // Demo 15 — flush queued stage-unlocks + autosave
   }
+  return true;
 }
+/* Exits tear the room down (action zone, tray handler, status) BEFORE sliding;
+   if a slide is still in flight the teardown would strand the player in a dead
+   room. Every exit checks this first. */
+function canLeaveRoom() { return !_transitionBusy; }
 
 function invertDir(dir) {
   if (dir === 'center') return 'center';
@@ -2862,6 +2862,7 @@ function closeExitConfirm() {
 /* The actual leave. Only marks selection complete + fires the Bible §5
    substrate/water unlocks when all 8 slots are filled. */
 function doExitSeedBank() {
+  if (!canLeaveRoom()) return;
   const complete = gameState.tray.filter(Boolean).length >= 8;
   if (complete) gameState.run.seedBankSelectionComplete = true;
 
@@ -3240,6 +3241,7 @@ function activeSpotSeedOnly() {
 
 function substrateCircleClick(i) {
   const lab = ensureSubstrateLabState();
+  if (lab.busy) return;
   if (activeSpotSeedOnly()) { flashBanner(); return; }   // choose a substrate first
   // Toggle off, or switch/select. Selecting a FULL spot keeps its substrate +
   // seed and enters "change the substrate" mode (banner → choose a substrate,
@@ -3250,6 +3252,7 @@ function substrateCircleClick(i) {
 
 function substrateSelectSub(id) {
   const lab = ensureSubstrateLabState();
+  if (lab.busy) return;
   if (lab.activeSpot == null) { flashBanner(); return; }   // pick a spot first
   lab.circles[lab.activeSpot].subId = id;                  // set / swap
   maybeCompleteActiveSpot();
@@ -3261,6 +3264,7 @@ function substrateSelectSub(id) {
    tray selection. A seed already on a spot is locked until it's put back. */
 function substrateTraySeedClick(idx) {
   const lab = ensureSubstrateLabState();
+  if (lab.busy) return true;
   const plant = gameState.tray[idx];
   if (!plant || plant.health <= 0) return true;
   if (!roomAcceptsStage('substrate', plant)) { flashBanner(); return true; }       // wrong stage (needs seed / already planted)
@@ -3275,6 +3279,7 @@ function substrateTraySeedClick(idx) {
 
 function clearActiveSubstrateSpot() {
   const lab = ensureSubstrateLabState();
+  if (lab.busy) return;
   if (lab.activeSpot == null) return;
   lab.circles[lab.activeSpot] = { subId: null, slotIndex: null };  // reset the whole spot
   renderSubstrateLab(gameState);   // stays selected → back to "choose a substrate"
@@ -3326,6 +3331,7 @@ function shakeActionButton(idx = 0) {
 
 function plantSeeds() {
   const lab = ensureSubstrateLabState();
+  if (lab.busy) { shakeActionButton(); return; }   // batch already resolving
   clearCircleFlashes();
 
   // Fully-assigned circles: a live plant AND a substrate.
@@ -3351,6 +3357,7 @@ function plantSeeds() {
     return;
   }
 
+  lab.busy = true;   // locks the bench, the button and Back to hub until the fly-back lands
   const subBySlot = {};
   ready.forEach(o => { subBySlot[o.c.slotIndex] = o.c.subId; });
   const outcomes = {};   // slotIndex → 'correct' | 'tolerated' | 'stress'
@@ -3401,7 +3408,11 @@ function plantSeeds() {
     flySeedlingsBack(ready, () => {
       ready.forEach(o => { lab.circles[o.i] = { subId: null, slotIndex: null }; });
       lab.activeSpot = null;
+      lab.busy = false;
       clearCircleFlashes();
+      // Only auto-leave if the player is still here (they can't leave while busy,
+      // but a resumed save or a devtools reset could have moved them).
+      if (gameState.ui.currentScreen !== 'room:substrate') return;
       if (win) exitSubstrateLab(true);
       else     renderSubstrateLab(gameState);
     });
@@ -3448,6 +3459,9 @@ function flySeedlingsBack(ready, done) {
 }
 
 function exitSubstrateLab(win) {
+  if (!canLeaveRoom()) return;
+  const lab = gameState.substrateLab;
+  if (lab && lab.busy) { shakeActionButton(1); flashBanner(); return; }   // seeds are mid-resolve
   setActionZone([]);
   setSlotClickHandler(null);
   clearSlotSelection();
@@ -3456,19 +3470,21 @@ function exitSubstrateLab(win) {
   clearTraySlotLocks();
   const ms = gameState.moduleState.substrate;
   const acted = ms.actionsThisSession > 0;
+  // Derived, like every other room: complete = no living seed left to plant.
+  const done = !gameState.tray.some(p => p && p.health > 0 && p.stage === 'seed');
 
-  if (win) markComplete('substrate');
-  else     markInProgress('substrate');
+  if (done) markComplete('substrate');
+  else      markInProgress('substrate');
 
-  // Early leave preserves the bench so you can resume; a win starts fresh.
-  if (win) gameState.substrateLab = null;
+  // Early leave preserves the bench so you can resume; done starts fresh.
+  if (done) gameState.substrateLab = null;
   transitionTo('hub', 'up-left');
 
   // Light Lab unlocks after the first room action in ANY module (Bible §5).
   if (acted && gameState.moduleState.light.status === 'locked') unlockRoomDelayed('light');
   if (acted) maybeUnlockRadiation();   // Specialist-only (Demo 15 difficulty gate)
   // Orientation Chamber unlocks after the Substrate Lab is completed once.
-  if (win) unlockRoomDelayed('orientation');
+  if (done) unlockRoomDelayed('orientation');
 }
 
 registerRoomBuilder('substrate', buildSubstrateLab);
@@ -3533,9 +3549,6 @@ const WATER_TARGET = {
   high:   { lo: 75, hi: 95 },
 };
 
-/* child → parent map from the topology (built once). */
-const PIPE_PARENT = {};
-Object.entries(PIPE_TOPOLOGY.edges).forEach(([p, kids]) => kids.forEach(k => { PIPE_PARENT[k] = p; }));
 
 /* Rendering knobs. flowSpeed is px/ms —
    a CONSTANT speed so the water head flows seamlessly across segment joints
@@ -4170,10 +4183,10 @@ function pressurize() {
     pm.ports[pid].outcome  = g.outcome;
     pm.ports[pid].grade    = g.grade;     // final now; the gauge shows it once pm.revealed flips (beat 1)
   });
-  deductFood(1);
   pm.tank = Math.max(0, avail - spent);
   gameState.run.waterTank = pm.tank;      // survives room resets + saves (one tankful per run)
   gameState.moduleState.water.actionsThisSession++;
+  deductFood(1);                          // last — its autosave carries the drained tank
   renderPipeMaze(gameState);              // tank drains + food updates now; gauges still blue
 
   const settle = animatePoweredFlow();
@@ -4323,6 +4336,7 @@ function portTooltip(id) {
    plants in batches of 4 ports); otherwise leaving marks it in-progress so the
    bench resumes next visit. */
 function exitPipeMaze() {
+  if (!canLeaveRoom()) return;
   // Don't let the player bail mid-Pressurize — the staged beats are still queued
   // (they'd age plants / advance the phase after we'd left). The run is brief.
   if (gameState.pipeMaze && gameState.pipeMaze.phase === 'running') return;
@@ -5262,6 +5276,7 @@ function spotTooltip(id) {
 
 /* --- exit ------------------------------------------------------------------ */
 function exitLightLab() {
+  if (!canLeaveRoom()) return;
   const ll = gameState.lightLab;
   if (ll && ll.phase === 'running') return;   // don't bail mid-cycle (beats still queued)
   if (ll && ll.phase === 'resolved') { shakeActionButton(1); flashLightBanner(); return; }   // return plants first
@@ -5997,6 +6012,7 @@ function spotMixTooltip(id) {
 
 /* --- exit ------------------------------------------------------------------ */
 function exitMixingConsole() {
+  if (!canLeaveRoom()) return;
   const mc = gameState.mixingConsole;
   if (mc && mc.phase === 'running') return;   // don't bail mid-feed (beats still queued)
   if (mc && mc.phase === 'resolved') { shakeActionButton(1); flashMixBanner(); return; }   // return plants first
@@ -6534,6 +6550,7 @@ function orientButtonTooltip(t) {
 
 /* --- exit ------------------------------------------------------------------ */
 function exitOrientationChamber() {
+  if (!canLeaveRoom()) return;
   const oc = gameState.orientationChamber;
   if (oc && oc.phase === 'running') return;   // don't bail mid-confirm (beats queued)
   if (oc && oc.phase === 'resolved') { shakeActionButton(1); flashOrientBanner(); return; }   // return plants first
@@ -6558,7 +6575,7 @@ function exitOrientationChamber() {
    rule per the resolved-ambiguities note: agar assigned AND a gravity reveal). */
 function maybeUnlockHydroponics() {
   const ms = gameState.moduleState;
-  const agar = !!(ms.substrate && ms.substrate.hasAgarGelAssignment);
+  const agar = gameState.tray.some(p => p && p.health > 0 && p.isHydroponic);
   const grav = !!(ms.orientation && ms.orientation.gravityRevealed);
   if (agar && grav && ms.hydroponics && ms.hydroponics.status === 'locked') unlockRoomDelayed('hydroponics');
 }
@@ -6643,7 +6660,7 @@ function hydroPlacedPots()   {
 function ensureHydroState() {
   if (!gameState.hydroponicBay) {
     const pots = {};
-    HYDRO_ALL_POTS.forEach(k => { pots[k] = { slotIndex: null, graded: false, flash: null, outcome: null, pendingReveal: null, pendingMarkers: [], pendingThrive: false }; });
+    HYDRO_ALL_POTS.forEach(k => { pots[k] = { slotIndex: null, graded: false, flash: null, outcome: null, pendingReveal: null, pendingMarkers: [] }; });
     gameState.hydroponicBay = {
       phase: 'setup',
       activePot: null,
@@ -6992,7 +7009,6 @@ function hydroLockIn() {
     pot.graded = true;
     pot.pendingReveal = 'ph';
     pot.pendingMarkers = markers;
-    pot.pendingThrive = thrive;
     pot.outcome = lockout ? 'lockout' : markers.length ? 'stress' : thrive ? 'thrive' : 'survive';
     pot.flash = markers.length ? 'far' : thrive ? 'ok' : 'near';
   });
@@ -7032,7 +7048,7 @@ function returnHydroPlant(k) {
   }
   flyHydroPlantToTray(k, () => {
     pot.slotIndex = null; pot.graded = false; pot.flash = null; pot.outcome = null;
-    pot.pendingReveal = null; pot.pendingMarkers = []; pot.pendingThrive = false;
+    pot.pendingReveal = null; pot.pendingMarkers = [];
     if (!HYDRO_ALL_POTS.some(x => hb.pots[x].graded)) {   // batch done → fresh solution for the next one
       hb.phase = 'setup';
       hb.channels = { back: { ph: HYDRO_TUNE.startPh, ec: HYDRO_TUNE.startEc }, front: { ph: HYDRO_TUNE.startPh, ec: HYDRO_TUNE.startEc } };
@@ -7132,6 +7148,7 @@ function hydroButtonTooltip(b) {
 
 /* --- exit ------------------------------------------------------------------ */
 function exitHydroponicBay() {
+  if (!canLeaveRoom()) return;
   const hb = gameState.hydroponicBay;
   if (hb && hb.phase === 'running') return;   // don't bail mid-resolve (beats queued)
   if (hb && hb.phase === 'resolved') { shakeActionButton(1); flashHydroBanner(); return; }   // return plants first
@@ -7241,7 +7258,6 @@ const RAD_TUNE = { ttMaxW: 320 };
 /* --- geometry helpers ------------------------------------------------------ */
 function radBayAbs(i)      { const a = RAD_BAYS[i]; return RAD_BAY_SHAPE.map(p => [a.x + p[0], a.y + p[1]]); }
 function radBaySeat(i)     { const a = RAD_BAYS[i]; return { x: a.x + RAD_BAY_SEAT.dx, y: a.y + RAD_BAY_SEAT.dy }; }
-function radBBox(points)   { return quadBBox(points); }
 /* clip-path polygon() string for a shape given as ABS points, relative to a bbox. */
 function radClipPath(points, bb) {
   return 'polygon(' + points.map(p => `${(p[0] - bb.x).toFixed(1)}px ${(p[1] - bb.y).toFixed(1)}px`).join(', ') + ')';
@@ -7425,7 +7441,7 @@ function renderRadiationDome(state, screenEl) {
   RAD_BAY_KEYS.forEach(k => {
     const el = wrap.querySelector(`.rad-bay[data-id="${k}"]`);
     if (!el) return;
-    const abs = radBayAbs(k), bb = radBBox(abs);
+    const abs = radBayAbs(k), bb = quadBBox(abs);
     el.style.left = bb.x + 'px'; el.style.top = bb.y + 'px';
     el.style.width = bb.w + 'px'; el.style.height = bb.h + 'px';
     el.style.clipPath = radClipPath(abs, bb);
@@ -7479,7 +7495,7 @@ function renderRadiationDome(state, screenEl) {
   // Rack quads + warped labels (highlight active only via the guide's pulse).
   RAD_RACK_ORDER.forEach(mk => {
     const el = wrap.querySelector(`.rad-rack[data-id="${mk}"]`);
-    const pts = RAD_RACK[mk].points, bb = radBBox(pts);
+    const pts = RAD_RACK[mk].points, bb = quadBBox(pts);
     if (el) {
       el.style.left = bb.x + 'px'; el.style.top = bb.y + 'px';
       el.style.width = bb.w + 'px'; el.style.height = bb.h + 'px';
@@ -7874,6 +7890,7 @@ function radRackTooltip(mk) {
 
 /* --- exit ------------------------------------------------------------------ */
 function exitRadiationDome() {
+  if (!canLeaveRoom()) return;
   const rd = gameState.radiationDome;
   if (rd && rd.phase === 'running') return;   // don't bail mid-resolve
   if (rd && rd.phase === 'resolved') { shakeActionButton(1); flashRadBanner(); return; }   // return plants first
@@ -8080,6 +8097,10 @@ function pollPopulateBench() {
   });
 }
 function pollSpotKeys() { return Object.keys(gameState.pollinationDome.spots).map(Number); }
+function pollCounts() {
+  const pd = gameState.pollinationDome, keys = pollSpotKeys();
+  return { ok: keys.filter(i => pd.spots[i].status === 'ok').length, missed: keys.filter(i => pd.spots[i].status === 'missed').length };
+}
 function pollScreen()   { return document.querySelector('.poll-screen'); }
 function pollWaiting()  { const pd = gameState.pollinationDome; return pollSpotKeys().filter(i => pd.spots[i].status === 'waiting'); }
 
@@ -8261,13 +8282,9 @@ function pollCheckEnd() {
   const pd = gameState.pollinationDome;
   if (pd.phase !== 'running' || pollWaiting().length > 0) return;
   pd.phase = 'resolved';
+  pd.counts = pollCounts();            // before deductFood — its autosave must carry the result
   deductFood(1);
   gameState.moduleState.pollination.actionsThisSession++;
-  const keys = pollSpotKeys();
-  pd.counts = {
-    ok:     keys.filter(i => pd.spots[i].status === 'ok').length,
-    missed: keys.filter(i => pd.spots[i].status === 'missed').length,
-  };
   pd.brushActive = false;
   pd.fanPlacing.on = false;
   if (pd.bee.state === 'armed') pd.bee.state = 'docked';
@@ -8884,7 +8901,7 @@ function updatePollGuide(root) {
     banner.innerHTML =
       pd.hint                          ? pd.hint :
       pd.phase === 'running'           ? `${waiting} flower${waiting === 1 ? '' : 's'} open —<br>match tool to type!` :
-      pd.phase === 'resolved'          ? `${pd.counts.ok} pollinated · ${pd.counts.missed} missed —<br>click each plant home` :
+      pd.phase === 'resolved'          ? (c => `${c.ok} pollinated · ${c.missed} missed —<br>click each plant home`)(pd.counts || pollCounts()) :
       spots.length > 0                 ? 'Hover each flower to read its<br>type, then Begin Pollination' :
       processedAny                     ? 'All flowers handled —<br>Back to hub' :
                                          'No flowers ready — grow<br>plants to Flowering first';
@@ -8960,6 +8977,7 @@ function pollRackTooltip(tk) {
 
 /* --- exit -------------------------------------------------------------------------- */
 function exitPollinationDome() {
+  if (!canLeaveRoom()) return;
   const pd = gameState.pollinationDome;
   if (pd && pd.phase === 'running') { pollHint('The flowers are open —<br>finish the session first!'); shakeActionButton(); return; }
   document.documentElement.style.removeProperty('--tt-max-width');
@@ -9193,7 +9211,7 @@ function buildHarvestBay(key) {
   wrap.appendChild(report);
 
   // Invisible hotspots over baked-in art: the gauge + the bin.
-  const meterBox = harvQuadBBox(HARV_METER.points);
+  const meterBox = quadBBox(HARV_METER.points);
   const meterHot = document.createElement('div');
   meterHot.className = 'harv-hotspot';
   meterHot.style.left = (meterBox.x - 8) + 'px';
@@ -9209,7 +9227,7 @@ function buildHarvestBay(key) {
   });
   wrap.appendChild(meterHot);
 
-  const binBox = harvQuadBBox(HARV_BIN.points);
+  const binBox = quadBBox(HARV_BIN.points);
   const binHot = document.createElement('div');
   binHot.className = 'harv-hotspot';
   binHot.style.left = binBox.x + 'px';
@@ -9238,11 +9256,6 @@ function buildHarvestBay(key) {
   wrap._ticker = createTicker(wrap, harvFrame);
   wrap._ticker.start();
   return wrap;
-}
-function harvQuadBBox(pts) {
-  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
-  const x = Math.min(...xs), y = Math.min(...ys);
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
 }
 function harvScreen()   { return document.querySelector('.harv-screen'); }
 function harvReportEl() { const s = harvScreen(); return s && s.querySelector('.harv-report'); }
@@ -9466,6 +9479,7 @@ function harvFinalizeEntry(entry) {
   harvMarkSlot(entry, false);
   entry.plant.stage = 'harvested';
   renderTray(gameState);
+  autosave();
   // The slot's harvest beat resolves: stub pops in; a zero-yield plant first
   // releases the missed-pollination icon — "this plant produced nothing".
   const slot = harvSlotEl(entry.plant.slotIndex);
@@ -9514,6 +9528,7 @@ function harvResolve() {
   }
   harvSyncActions();
   harvUpdateBanner();
+  autosave();
 }
 
 /* ============================================================================
@@ -9668,6 +9683,7 @@ function openRunSummary() {
 
   hsBuildColony(body);
   host.appendChild(modal);
+  autosave();
 }
 
 /* — COLONY tab — */
@@ -9836,6 +9852,7 @@ function harvDrawCanvas(wrap) {
 
 /* --- exit --------------------------------------------------------------------- */
 function exitHarvestBay() {
+  if (!canLeaveRoom()) return;
   const hb = gameState.harvestBay;
   if (hb && hb.phase === 'running') { shakeActionButton(); return; }
   setActionZone([]);
@@ -9871,7 +9888,7 @@ const SAVE_VERSION = 1;
 const ROOM_STATE_KEYS = ['substrateLab', 'pipeMaze', 'lightLab', 'mixingConsole',
   'orientationChamber', 'hydroponicBay', 'radiationDome', 'pollinationDome'];
 /* Keys never written to the save: timer handles + per-frame sprite scratch. */
-const SAVE_SKIP_KEYS = new Set(['_hintTimer', '_frame']);
+const SAVE_SKIP_KEYS = new Set(['_hintTimer', '_frame', 'hint']);
 
 /* A save can land while a room is mid-"running" (the food is paid the instant
    the action starts; the beats that paint the verdict come later). Every room
@@ -9919,6 +9936,23 @@ function resumeRoomStates() {
   // A stage advance during resume may have queued a hub unlock — the Continue
   // path renders the hub directly (no transitionTo), so flush it here.
   _pendingHubUnlocks.splice(0).forEach(k => unlockRoom(k, { animate: false }));
+  rederiveUnlocks();
+}
+
+/* Every unlock condition, re-checked from saved state. Unlock timers fire
+   after the hub autosave, so a tab closed in that window would otherwise leave
+   a room locked for the run (Orientation → Hydroponics in particular). */
+function rederiveUnlocks() {
+  const ms = gameState.moduleState, run = gameState.run;
+  const living = gameState.tray.filter(p => p && p.health > 0);
+  const anyAction = Object.values(ms).some(m => (m.actionsThisSession || 0) > 0);
+  const open = key => { if (ms[key] && ms[key].status === 'locked') unlockRoom(key, { animate: false }); };
+  if (run.seedBankSelectionComplete) { open('substrate'); open('water'); }
+  if (anyAction) { open('light'); maybeUnlockRadiation(); }
+  if (ms.substrate.status === 'complete') open('orientation');
+  if (ms.light.status !== 'locked' && (ms.light.actionsThisSession > 0 || ms.light.status !== 'ready')) open('nutrients');
+  if (living.some(p => ['flowering', 'fruiting', 'harvestable', 'harvested'].includes(p.stage))) open('pollination');
+  maybeUnlockHydroponics();
 }
 
 /* --- difficulty -------------------------------------------------------------
@@ -10045,6 +10079,7 @@ function loadState() {
   try { snap = JSON.parse(localStorage.getItem(SAVE_KEY)); }
   catch (_) { return false; }
   if (!snap || !snap.run) return false;
+  if (snap.version !== SAVE_VERSION) { clearSaveState(); return false; }   // older layout → start fresh
 
   Object.assign(gameState.run, snap.run);
   gameState.tray       = snap.tray       || [null, null, null, null, null, null, null, null];
