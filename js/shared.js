@@ -10103,17 +10103,11 @@ function mountStartupScreen(opts = {}) {
   stars.className = 'startup-stars';
   layer.appendChild(stars);
 
-  // The station itself — tucked under the subtitle, its domes peeking out
-  // behind the menu buttons, the bulk of it filling the empty band below.
-  const station = document.createElement('img');
-  station.className = 'startup-station';
-  station.src = assetUrl('menu-station');
-  station.alt = '';
-  layer.appendChild(station);
-
   const inner = document.createElement('div');
   inner.className = 'startup-inner';
+  // The station crowns the menu: first in the column, everything else below.
   inner.innerHTML = `
+    <img class="startup-station" src="${assetUrl('menu-station')}" alt="">
     <div class="startup-kicker">COLONY AGRICULTURE PROGRAM</div>
     <div class="startup-title">STARSEED<br>STATION</div>
     <div class="startup-sub">grow the food · learn the science · feed the colony</div>
